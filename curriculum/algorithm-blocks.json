@@ -1,0 +1,247 @@
+{
+  "schema_version": "1.0",
+  "provider": "LeetCode",
+  "url_template": "https://leetcode.com/problems/{slug}/",
+  "blocks": [
+    {
+      "id": "arrays-and-hashing",
+      "tag": "Arrays & Hashing",
+      "problems": [
+        {"slug": "contains-duplicate", "title": "Contains Duplicate"},
+        {"slug": "valid-anagram", "title": "Valid Anagram"},
+        {"slug": "two-sum", "title": "Two Sum"},
+        {"slug": "group-anagrams", "title": "Group Anagrams"},
+        {"slug": "top-k-frequent-elements", "title": "Top K Frequent Elements"},
+        {"slug": "product-of-array-except-self", "title": "Product of Array Except Self"},
+        {"slug": "valid-sudoku", "title": "Valid Sudoku"},
+        {"slug": "longest-consecutive-sequence", "title": "Longest Consecutive Sequence"},
+        {"slug": "subarray-sum-equals-k", "title": "Subarray Sum Equals K"},
+        {"slug": "majority-element", "title": "Majority Element"},
+        {"slug": "sort-characters-by-frequency", "title": "Sort Characters By Frequency"},
+        {"slug": "design-hashmap", "title": "Design HashMap"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "two-pointers",
+      "tag": "Two Pointers",
+      "problems": [
+        {"slug": "valid-palindrome", "title": "Valid Palindrome"},
+        {"slug": "two-sum-ii-input-array-is-sorted", "title": "Two Sum II - Input Array Is Sorted"},
+        {"slug": "3sum", "title": "3Sum"},
+        {"slug": "container-with-most-water", "title": "Container With Most Water"},
+        {"slug": "trapping-rain-water", "title": "Trapping Rain Water"},
+        {"slug": "sort-colors", "title": "Sort Colors"},
+        {"slug": "move-zeroes", "title": "Move Zeroes"},
+        {"slug": "boats-to-save-people", "title": "Boats to Save People"},
+        {"slug": "backspace-string-compare", "title": "Backspace String Compare"},
+        {"slug": "4sum", "title": "4Sum"},
+        {"slug": "remove-duplicates-from-sorted-array", "title": "Remove Duplicates from Sorted Array"},
+        {"slug": "squares-of-a-sorted-array", "title": "Squares of a Sorted Array"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "sliding-window",
+      "tag": "Sliding Window",
+      "problems": [
+        {"slug": "best-time-to-buy-and-sell-stock", "title": "Best Time to Buy and Sell Stock"},
+        {"slug": "longest-substring-without-repeating-characters", "title": "Longest Substring Without Repeating Characters"},
+        {"slug": "longest-repeating-character-replacement", "title": "Longest Repeating Character Replacement"},
+        {"slug": "permutation-in-string", "title": "Permutation in String"},
+        {"slug": "minimum-window-substring", "title": "Minimum Window Substring"},
+        {"slug": "sliding-window-maximum", "title": "Sliding Window Maximum"},
+        {"slug": "max-consecutive-ones-iii", "title": "Max Consecutive Ones III"},
+        {"slug": "minimum-size-subarray-sum", "title": "Minimum Size Subarray Sum"},
+        {"slug": "fruit-into-baskets", "title": "Fruit Into Baskets"},
+        {"slug": "subarray-product-less-than-k", "title": "Subarray Product Less Than K"},
+        {"slug": "find-all-anagrams-in-a-string", "title": "Find All Anagrams in a String"},
+        {"slug": "maximum-average-subarray-i", "title": "Maximum Average Subarray I"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "stack",
+      "tag": "Stack",
+      "problems": [
+        {"slug": "valid-parentheses", "title": "Valid Parentheses"},
+        {"slug": "min-stack", "title": "Min Stack"},
+        {"slug": "evaluate-reverse-polish-notation", "title": "Evaluate Reverse Polish Notation"},
+        {"slug": "generate-parentheses", "title": "Generate Parentheses"},
+        {"slug": "daily-temperatures", "title": "Daily Temperatures"},
+        {"slug": "car-fleet", "title": "Car Fleet"},
+        {"slug": "largest-rectangle-in-histogram", "title": "Largest Rectangle in Histogram"},
+        {"slug": "asteroid-collision", "title": "Asteroid Collision"},
+        {"slug": "decode-string", "title": "Decode String"},
+        {"slug": "simplify-path", "title": "Simplify Path"},
+        {"slug": "remove-k-digits", "title": "Remove K Digits"},
+        {"slug": "online-stock-span", "title": "Online Stock Span"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "binary-search",
+      "tag": "Binary Search",
+      "problems": [
+        {"slug": "binary-search", "title": "Binary Search"},
+        {"slug": "search-a-2d-matrix", "title": "Search a 2D Matrix"},
+        {"slug": "koko-eating-bananas", "title": "Koko Eating Bananas"},
+        {"slug": "find-minimum-in-rotated-sorted-array", "title": "Find Minimum in Rotated Sorted Array"},
+        {"slug": "search-in-rotated-sorted-array", "title": "Search in Rotated Sorted Array"},
+        {"slug": "time-based-key-value-store", "title": "Time Based Key-Value Store"},
+        {"slug": "median-of-two-sorted-arrays", "title": "Median of Two Sorted Arrays"},
+        {"slug": "search-insert-position", "title": "Search Insert Position"},
+        {"slug": "find-peak-element", "title": "Find Peak Element"},
+        {"slug": "capacity-to-ship-packages-within-d-days", "title": "Capacity To Ship Packages Within D Days"},
+        {"slug": "split-array-largest-sum", "title": "Split Array Largest Sum"},
+        {"slug": "find-first-and-last-position-of-element-in-sorted-array", "title": "Find First and Last Position of Element in Sorted Array"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "linked-list",
+      "tag": "Linked List",
+      "problems": [
+        {"slug": "reverse-linked-list", "title": "Reverse Linked List"},
+        {"slug": "merge-two-sorted-lists", "title": "Merge Two Sorted Lists"},
+        {"slug": "reorder-list", "title": "Reorder List"},
+        {"slug": "remove-nth-node-from-end-of-list", "title": "Remove Nth Node From End of List"},
+        {"slug": "copy-list-with-random-pointer", "title": "Copy List with Random Pointer"},
+        {"slug": "add-two-numbers", "title": "Add Two Numbers"},
+        {"slug": "linked-list-cycle", "title": "Linked List Cycle"},
+        {"slug": "find-the-duplicate-number", "title": "Find the Duplicate Number"},
+        {"slug": "lru-cache", "title": "LRU Cache"},
+        {"slug": "reverse-nodes-in-k-group", "title": "Reverse Nodes in k-Group"},
+        {"slug": "swap-nodes-in-pairs", "title": "Swap Nodes in Pairs"},
+        {"slug": "merge-k-sorted-lists", "title": "Merge k Sorted Lists"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "trees",
+      "tag": "Trees",
+      "problems": [
+        {"slug": "invert-binary-tree", "title": "Invert Binary Tree"},
+        {"slug": "maximum-depth-of-binary-tree", "title": "Maximum Depth of Binary Tree"},
+        {"slug": "diameter-of-binary-tree", "title": "Diameter of Binary Tree"},
+        {"slug": "balanced-binary-tree", "title": "Balanced Binary Tree"},
+        {"slug": "same-tree", "title": "Same Tree"},
+        {"slug": "subtree-of-another-tree", "title": "Subtree of Another Tree"},
+        {"slug": "lowest-common-ancestor-of-a-binary-search-tree", "title": "Lowest Common Ancestor of a Binary Search Tree"},
+        {"slug": "binary-tree-level-order-traversal", "title": "Binary Tree Level Order Traversal"},
+        {"slug": "binary-tree-right-side-view", "title": "Binary Tree Right Side View"},
+        {"slug": "count-good-nodes-in-binary-tree", "title": "Count Good Nodes in Binary Tree"},
+        {"slug": "validate-binary-search-tree", "title": "Validate Binary Search Tree"},
+        {"slug": "kth-smallest-element-in-a-bst", "title": "Kth Smallest Element in a BST"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "tries",
+      "tag": "Tries",
+      "problems": [
+        {"slug": "implement-trie-prefix-tree", "title": "Implement Trie (Prefix Tree)"},
+        {"slug": "design-add-and-search-words-data-structure", "title": "Design Add and Search Words Data Structure"},
+        {"slug": "word-search-ii", "title": "Word Search II"},
+        {"slug": "replace-words", "title": "Replace Words"},
+        {"slug": "map-sum-pairs", "title": "Map Sum Pairs"},
+        {"slug": "longest-word-in-dictionary", "title": "Longest Word in Dictionary"},
+        {"slug": "stream-of-characters", "title": "Stream of Characters"},
+        {"slug": "word-search", "title": "Word Search"},
+        {"slug": "prefix-and-suffix-search", "title": "Prefix and Suffix Search"},
+        {"slug": "search-suggestions-system", "title": "Search Suggestions System"},
+        {"slug": "maximum-xor-of-two-numbers-in-an-array", "title": "Maximum XOR of Two Numbers in an Array"},
+        {"slug": "short-encoding-of-words", "title": "Short Encoding of Words"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "heap-priority-queue",
+      "tag": "Heap / Priority Queue",
+      "problems": [
+        {"slug": "kth-largest-element-in-a-stream", "title": "Kth Largest Element in a Stream"},
+        {"slug": "last-stone-weight", "title": "Last Stone Weight"},
+        {"slug": "k-closest-points-to-origin", "title": "K Closest Points to Origin"},
+        {"slug": "kth-largest-element-in-an-array", "title": "Kth Largest Element in an Array"},
+        {"slug": "task-scheduler", "title": "Task Scheduler"},
+        {"slug": "design-twitter", "title": "Design Twitter"},
+        {"slug": "find-median-from-data-stream", "title": "Find Median from Data Stream"},
+        {"slug": "merge-k-sorted-lists", "title": "Merge k Sorted Lists"},
+        {"slug": "reorganize-string", "title": "Reorganize String"},
+        {"slug": "meeting-rooms-ii", "title": "Meeting Rooms II"},
+        {"slug": "ipo", "title": "IPO"},
+        {"slug": "smallest-range-covering-elements-from-k-lists", "title": "Smallest Range Covering Elements from K Lists"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "backtracking",
+      "tag": "Backtracking",
+      "problems": [
+        {"slug": "subsets", "title": "Subsets"},
+        {"slug": "combination-sum", "title": "Combination Sum"},
+        {"slug": "permutations", "title": "Permutations"},
+        {"slug": "subsets-ii", "title": "Subsets II"},
+        {"slug": "combination-sum-ii", "title": "Combination Sum II"},
+        {"slug": "word-search", "title": "Word Search"},
+        {"slug": "palindrome-partitioning", "title": "Palindrome Partitioning"},
+        {"slug": "letter-combinations-of-a-phone-number", "title": "Letter Combinations of a Phone Number"},
+        {"slug": "n-queens", "title": "N-Queens"},
+        {"slug": "generate-parentheses", "title": "Generate Parentheses"},
+        {"slug": "restore-ip-addresses", "title": "Restore IP Addresses"},
+        {"slug": "sudoku-solver", "title": "Sudoku Solver"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "graphs",
+      "tag": "Graphs",
+      "problems": [
+        {"slug": "number-of-islands", "title": "Number of Islands"},
+        {"slug": "clone-graph", "title": "Clone Graph"},
+        {"slug": "max-area-of-island", "title": "Max Area of Island"},
+        {"slug": "pacific-atlantic-water-flow", "title": "Pacific Atlantic Water Flow"},
+        {"slug": "surrounded-regions", "title": "Surrounded Regions"},
+        {"slug": "rotting-oranges", "title": "Rotting Oranges"},
+        {"slug": "walls-and-gates", "title": "Walls and Gates"},
+        {"slug": "course-schedule", "title": "Course Schedule"},
+        {"slug": "course-schedule-ii", "title": "Course Schedule II"},
+        {"slug": "redundant-connection", "title": "Redundant Connection"},
+        {"slug": "graph-valid-tree", "title": "Graph Valid Tree"},
+        {"slug": "number-of-connected-components-in-an-undirected-graph", "title": "Number of Connected Components in an Undirected Graph"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    },
+    {
+      "id": "dynamic-programming",
+      "tag": "Dynamic Programming",
+      "problems": [
+        {"slug": "climbing-stairs", "title": "Climbing Stairs"},
+        {"slug": "min-cost-climbing-stairs", "title": "Min Cost Climbing Stairs"},
+        {"slug": "house-robber", "title": "House Robber"},
+        {"slug": "house-robber-ii", "title": "House Robber II"},
+        {"slug": "longest-palindromic-substring", "title": "Longest Palindromic Substring"},
+        {"slug": "palindromic-substrings", "title": "Palindromic Substrings"},
+        {"slug": "decode-ways", "title": "Decode Ways"},
+        {"slug": "coin-change", "title": "Coin Change"},
+        {"slug": "maximum-product-subarray", "title": "Maximum Product Subarray"},
+        {"slug": "word-break", "title": "Word Break"},
+        {"slug": "longest-increasing-subsequence", "title": "Longest Increasing Subsequence"},
+        {"slug": "partition-equal-subset-sum", "title": "Partition Equal Subset Sum"}
+      ],
+      "day_mode": ["new", "new", "new", "new", "review", "timed", "timed"],
+      "days": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [0, 3, 6], [1, 4, 7], [2, 5, 8]]
+    }
+  ]
+}

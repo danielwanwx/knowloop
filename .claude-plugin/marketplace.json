@@ -1,0 +1,33 @@
+{
+  "name": "crack-system-interview-skill",
+  "owner": {
+    "name": "Crack System Interview contributors"
+  },
+  "description": "Interview coaching with private evidence, optional course and visual tools.",
+  "plugins": [
+    {
+      "name": "crack-system-interview-skill",
+      "source": "./plugins/crack-system-interview-skill",
+      "description": "Start with interview-coach for coding, design, data, behavioral and resume practice.",
+      "version": "0.10.0",
+      "author": {
+        "name": "Crack System Interview contributors"
+      },
+      "homepage": "https://knowloop.example",
+      "repository": "https://knowloop.example",
+      "license": "MIT",
+      "keywords": [
+        "interview",
+        "system-design",
+        "excalidraw",
+        "skill"
+      ],
+      "category": "productivity",
+      "tags": [
+        "interview-prep",
+        "excalidraw",
+        "skills"
+      ]
+    }
+  ]
+}

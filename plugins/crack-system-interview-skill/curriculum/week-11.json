@@ -1,0 +1,883 @@
+{
+  "schema_version": "2.0",
+  "week": 11,
+  "theme": "周期任务、时序活动与派生视图",
+  "algorithm_block": "graphs",
+  "projects": [
+    {
+      "slug": "camelcamelcamel",
+      "title": "Price Tracking Service",
+      "complete_read_day": 1,
+      "deep_dive_day": 2
+    },
+    {
+      "slug": "strava",
+      "title": "Strava",
+      "complete_read_day": 3,
+      "deep_dive_day": 4
+    }
+  ],
+  "audio_preview": {
+    "title": "Week 11｜价格追踪与 Strava 两分钟预听",
+    "script": "这一周比较两种“时间不断前进”的系统。Price Tracking Service 要发现并周期抓取五亿商品，把不可信来源转换成可审计的价格历史，再按阈值可靠通知用户；Strava 则从手机离线记录活动，恢复网络后分片上传轨迹，生成路线、距离、feed、实时分享和排行榜。两题都不能把定时器或 WebSocket 当作正确性。周期任务需要 durable schedule、lease、幂等结果和有上限的 retry；移动端同步需要 activity_id、chunk sequence、finalize transaction 和冲突策略。原始事实与派生视图也要分开：价格 observation、GPS points 是可重算依据，图表、feed、segment leaderboard 和通知状态是投影。迟到、重复和乱序事件必须在数据模型里有位置。性能优化从访问模式出发：价格图按 product+time 分区并 rollup，活动流按 athlete/follower 组织，实时位置只保留短窗口并明确 freshness。深挖时持续追问谁拥有权威状态、任务失败后下一次何时执行、用户为什么不会收到重复提醒、设备离线几小时后如何收敛。最终要用 schedule lag、observation quality、notification duplicate、sync completion、live-location age 和 leaderboard drift 证明系统不仅跑得快，而且能长期修复。练习还要分别模拟租约持有者复活、设备重复提交和投影重建，验证旧写入不会覆盖新版本，用户也能看见数据仍在处理或已经陈旧。",
+    "provider": "ElevenLabs",
+    "voice": "Siqi Liu - Calm, Warm and Gentle",
+    "model": "Eleven v3",
+    "auto_generate": false
+  },
+  "days": [
+    {
+      "week": 11,
+      "day": 1,
+      "kind": "project-read",
+      "title": "Price Tracking Service · 完整通读",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "问题框定",
+          "instruction": "先写 FR/NFR、容量假设和不做什么；暂不画扩展组件。",
+          "minutes": 30
+        },
+        {
+          "title": "连续完整通读",
+          "instruction": "从 Understanding/Understand the Problem 按原文顺序读到 High-Level Design：Price Tracking Service。",
+          "minutes": 80
+        },
+        {
+          "title": "关页重建",
+          "instruction": "不看答案重画 API、数据模型、读写路径和权威状态。",
+          "minutes": 30
+        },
+        {
+          "title": "验收与修复",
+          "instruction": "逐条核对验收标准；不通过就执行当天 repair，不用补读掩盖。",
+          "minutes": 20
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Understanding the Problem",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#understanding-the-problem"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Non-Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#non-functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "The Set Up",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#the-set-up"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Planning the Approach",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#planning-the-approach"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Defining the Core Entities",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#defining-the-core-entities"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "The API",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#the-api"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Data Flow",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#data-flow"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "High-Level Design",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#high-level-design"
+        }
+      ],
+      "artifact": "一张包含 product discovery、durable scheduler、fetch/extension observations、validation、price history、threshold subscription 与 notification workflow 的价格追踪白板。",
+      "acceptance": [
+        "五亿商品不会同时扫描，任务按 next_due、变化率、价值和来源限速分层调度。",
+        "价格 observation 保留 source、observed_at、confidence 与幂等 ID，恶意扩展数据不能直接成为当前价格。",
+        "阈值 crossing、通知去重、重试和 re-arm 有持久状态。"
+      ],
+      "repair": "若设计只写 cron + scraper + DB，补 ProductSchedule、FetchAttempt、PriceObservation、Subscription、Notification 五个状态机及 lease/retry。",
+      "algorithms": {
+        "tag": "Graphs",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Number of Islands",
+            "slug": "number-of-islands",
+            "url": "https://leetcode.com/problems/number-of-islands/"
+          },
+          {
+            "title": "Clone Graph",
+            "slug": "clone-graph",
+            "url": "https://leetcode.com/problems/clone-graph/"
+          },
+          {
+            "title": "Max Area of Island",
+            "slug": "max-area-of-island",
+            "url": "https://leetcode.com/problems/max-area-of-island/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 11,
+      "day": 2,
+      "kind": "project-deep",
+      "title": "Price Tracking Service · Deep Dive 与 Senior 修复",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "Deep Dives",
+          "instruction": "围绕 Price Tracking Service 逐个回答机制、规模阈值和失败语义。",
+          "minutes": 50
+        },
+        {
+          "title": "精确补课",
+          "instruction": "只读今天列出的 Core / Technology / Pattern / DDIA 小节。",
+          "minutes": 30
+        },
+        {
+          "title": "Senior/Staff 追问",
+          "instruction": "先口述回答，再对照详细答案；为每个追问写证据。",
+          "minutes": 40
+        },
+        {
+          "title": "故障注入与修复",
+          "instruction": "把超时、重复、乱序、热点或部分失败注入白板后重答。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Potential Deep Dives",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#potential-deep-dives"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "1) How do we efficiently discover and track 500 million Amazon products?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#1-how-do-we-efficiently-discover-and-track-500-million-amazon-products"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "2) How do we handle potentially malicious price updates from Chrome extension users?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#2-how-do-we-handle-potentially-malicious-price-updates-from-chrome-extension-users"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "3) How do we efficiently process price changes and notify subscribed users?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#3-how-do-we-efficiently-process-price-changes-and-notify-subscribed-users"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "4) How do we serve fast price history queries for chart generation?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#4-how-do-we-serve-fast-price-history-queries-for-chart-generation"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Final Design",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#final-design"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "What is Expected at Each Level?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#what-is-expected-at-each-level"
+        },
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "Senior",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#senior"
+        },
+        {
+          "source_id": "hi.pattern.long-running-tasks",
+          "page_title": "Managing Long Running Tasks",
+          "heading": "Orchestrating Job Dependencies",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/long-running-tasks#orchestrating-job-dependencies"
+        },
+        {
+          "source_id": "hi.pattern.long-running-tasks",
+          "page_title": "Managing Long Running Tasks",
+          "heading": "Handling Repeated Failures",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/long-running-tasks#handling-repeated-failures"
+        },
+        {
+          "source_id": "hi.deep.time-series-databases",
+          "page_title": "Time Series Databases",
+          "heading": "Time-Based Partitioning (Sharding by Time)",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/time-series-databases#time-based-partitioning-sharding-by-time"
+        },
+        {
+          "source_id": "hi.deep.time-series-databases",
+          "page_title": "Time Series Databases",
+          "heading": "Downsampling and Rollups",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/time-series-databases#downsampling-and-rollups"
+        },
+        {
+          "source_id": "hi.deep.kafka",
+          "page_title": "Kafka",
+          "heading": "Handling Retries and Errors",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/kafka#handling-retries-and-errors"
+        },
+        {
+          "source_id": "ddia.ch11",
+          "page_title": "11 批处理",
+          "heading": "分布式作业编排",
+          "url": "https://ddia.vonng.com/ch11/#id278"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "流处理的应用",
+          "url": "https://ddia.vonng.com/ch12/#sec_stream_uses"
+        },
+        {
+          "source_id": "ddia.ch9",
+          "page_title": "9 分布式系统的麻烦",
+          "heading": "故障与部分失效",
+          "url": "https://ddia.vonng.com/ch9/#sec_distributed_partial_failure"
+        }
+      ],
+      "artifact": "分层调度、来源可信度与异常检测、threshold state machine、时序分区/rollup、失败重试和数据修正 runbook。",
+      "acceptance": [
+        "调度吞吐能从 500M 商品、抓取周期和来源 politeness 估算，热点与冷商品频率不同。",
+        "扩展 observation 只作为信号，经过签名、限流、交叉验证和异常规则后才影响价格。",
+        "通知以 subscription+crossing/version 幂等，价格回摆和 provider retry 不会骚扰用户。"
+      ],
+      "repair": "答不出任务规模时计算每日 due items 与 fetch/s；答不出通知时画 below→crossed→notified→rearmed 状态及唯一键。",
+      "algorithms": {
+        "tag": "Graphs",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Pacific Atlantic Water Flow",
+            "slug": "pacific-atlantic-water-flow",
+            "url": "https://leetcode.com/problems/pacific-atlantic-water-flow/"
+          },
+          {
+            "title": "Surrounded Regions",
+            "slug": "surrounded-regions",
+            "url": "https://leetcode.com/problems/surrounded-regions/"
+          },
+          {
+            "title": "Rotting Oranges",
+            "slug": "rotting-oranges",
+            "url": "https://leetcode.com/problems/rotting-oranges/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 11,
+      "day": 3,
+      "kind": "project-read",
+      "title": "Strava · 完整通读",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "问题框定",
+          "instruction": "先写 FR/NFR、容量假设和不做什么；暂不画扩展组件。",
+          "minutes": 30
+        },
+        {
+          "title": "连续完整通读",
+          "instruction": "从 Understanding/Understand the Problem 按原文顺序读到 High-Level Design：Strava。",
+          "minutes": 80
+        },
+        {
+          "title": "关页重建",
+          "instruction": "不看答案重画 API、数据模型、读写路径和权威状态。",
+          "minutes": 30
+        },
+        {
+          "title": "验收与修复",
+          "instruction": "逐条核对验收标准；不通过就执行当天 repair，不用补读掩盖。",
+          "minutes": 20
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "Understanding the Problem",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#understanding-the-problem"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "Non-Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#non-functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "The Set Up",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#the-set-up"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "Defining the Core Entities",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#defining-the-core-entities"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "The API",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#the-api"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "High-Level Design",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#high-level-design"
+        }
+      ],
+      "artifact": "一张包含 mobile offline recording、chunk upload/finalize、activity processing、feed、live sharing 和 leaderboard 的 Strava 白板。",
+      "acceptance": [
+        "离线 GPS 先写本地 durable log，网络恢复后分片幂等上传并原子 finalize。",
+        "Activity 原始轨迹与距离、路线、feed、segment effort 等派生结果分离且可重算。",
+        "10M concurrent、实时分享和 leaderboard 分别有分区、陈旧和隐私边界。"
+      ],
+      "repair": "若设计假设手机始终在线，先画 start/pause/stop 本地状态机、chunk sequence、upload session、checksum 和 finalize transaction。",
+      "algorithms": {
+        "tag": "Graphs",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Walls and Gates",
+            "slug": "walls-and-gates",
+            "url": "https://leetcode.com/problems/walls-and-gates/"
+          },
+          {
+            "title": "Course Schedule",
+            "slug": "course-schedule",
+            "url": "https://leetcode.com/problems/course-schedule/"
+          },
+          {
+            "title": "Course Schedule II",
+            "slug": "course-schedule-ii",
+            "url": "https://leetcode.com/problems/course-schedule-ii/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 11,
+      "day": 4,
+      "kind": "project-deep",
+      "title": "Strava · Deep Dive 与 Senior 修复",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "Deep Dives",
+          "instruction": "围绕 Strava 逐个回答机制、规模阈值和失败语义。",
+          "minutes": 50
+        },
+        {
+          "title": "精确补课",
+          "instruction": "只读今天列出的 Core / Technology / Pattern / DDIA 小节。",
+          "minutes": 30
+        },
+        {
+          "title": "Senior/Staff 追问",
+          "instruction": "先口述回答，再对照详细答案；为每个追问写证据。",
+          "minutes": 40
+        },
+        {
+          "title": "故障注入与修复",
+          "instruction": "把超时、重复、乱序、热点或部分失败注入白板后重答。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "Potential Deep Dives",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#potential-deep-dives"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "1) How can we support tracking activities while offline?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#1-how-can-we-support-tracking-activities-while-offline"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "2) How can we scale to support 10 million concurrent activities?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#2-how-can-we-scale-to-support-10-million-concurrent-activities"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "3) How can we support realtime sharing of activities with friends?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#3-how-can-we-support-realtime-sharing-of-activities-with-friends"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "4) How can we expose a leaderboard of top athletes?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#4-how-can-we-expose-a-leaderboard-of-top-athletes"
+        },
+        {
+          "source_id": "hi.senior.expectations",
+          "page_title": "The System Design Interview: What is Expected at Each Level",
+          "heading": "Breadth",
+          "url": "https://www.hellointerview.com/blog/the-system-design-interview-what-is-expected-at-each-level#breadth"
+        },
+        {
+          "source_id": "hi.senior.expectations",
+          "page_title": "The System Design Interview: What is Expected at Each Level",
+          "heading": "Depth",
+          "url": "https://www.hellointerview.com/blog/the-system-design-interview-what-is-expected-at-each-level#depth"
+        },
+        {
+          "source_id": "hi.senior.expectations",
+          "page_title": "The System Design Interview: What is Expected at Each Level",
+          "heading": "Proactiveness",
+          "url": "https://www.hellointerview.com/blog/the-system-design-interview-what-is-expected-at-each-level#proactiveness"
+        },
+        {
+          "source_id": "hi.pattern.realtime-updates",
+          "page_title": "Real-time Updates",
+          "heading": "\"How do you handle connection failures and reconnection?\"",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/realtime-updates#how-do-you-handle-connection-failures-and-reconnection"
+        },
+        {
+          "source_id": "hi.pattern.scaling-writes",
+          "page_title": "Scaling Writes",
+          "heading": "Batching and Hierarchical Aggregation",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/scaling-writes#batching-and-hierarchical-aggregation"
+        },
+        {
+          "source_id": "hi.deep.time-series-databases",
+          "page_title": "Time Series Databases",
+          "heading": "Time-Based Partitioning (Sharding by Time)",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/time-series-databases#time-based-partitioning-sharding-by-time"
+        },
+        {
+          "source_id": "hi.core.db-indexing",
+          "page_title": "Database Indexing",
+          "heading": "Geospatial Indexes",
+          "url": "https://www.hellointerview.com/learn/system-design/core-concepts/db-indexing#geospatial-indexes"
+        },
+        {
+          "source_id": "hi.pattern.long-running-tasks",
+          "page_title": "Managing Long Running Tasks",
+          "heading": "Preventing Duplicate Work",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/long-running-tasks#preventing-duplicate-work"
+        },
+        {
+          "source_id": "ddia.ch6",
+          "page_title": "6 复制",
+          "heading": "同步引擎与本地优先软件",
+          "url": "https://ddia.vonng.com/ch6/#sec_replication_offline_clients"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "时间推理",
+          "url": "https://ddia.vonng.com/ch12/#sec_stream_time"
+        },
+        {
+          "source_id": "ddia.ch7",
+          "page_title": "7 分片",
+          "heading": "倾斜的工作负载与缓解热点",
+          "url": "https://ddia.vonng.com/ch7/#sec_sharding_skew"
+        }
+      ],
+      "artifact": "offline sync、10M ingest 分区、live location freshness/privacy、segment leaderboard 版本与 raw replay failure matrix。",
+      "acceptance": [
+        "重复、乱序和缺失 chunk 不会生成两次 Activity，finalize 前对 checksum/sequence 完整性校验。",
+        "实时分享丢连接后用 cursor/snapshot 恢复，并在位置过旧或权限撤销时 fail-closed。",
+        "排行榜能说明 eligibility、segment matching、late correction、作弊审核和重算。"
+      ],
+      "repair": "答不出同步时列 device/activity/chunk 三层 ID；答不出榜单时拆 raw GPS、effort detection、eligibility、rank projection 与 moderation。",
+      "algorithms": {
+        "tag": "Graphs",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Redundant Connection",
+            "slug": "redundant-connection",
+            "url": "https://leetcode.com/problems/redundant-connection/"
+          },
+          {
+            "title": "Graph Valid Tree",
+            "slug": "graph-valid-tree",
+            "url": "https://leetcode.com/problems/graph-valid-tree/"
+          },
+          {
+            "title": "Number of Connected Components in an Undirected Graph",
+            "slug": "number-of-connected-components-in-an-undirected-graph",
+            "url": "https://leetcode.com/problems/number-of-connected-components-in-an-undirected-graph/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 11,
+      "day": 5,
+      "kind": "integration",
+      "title": "调度、时间序列、Feed 与重算策略",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "两条事件时间轴",
+          "instruction": "逐事件画商品抓价到通知和离线 GPS 到活动保存，写事件时间、处理时间、去重键与权威原始记录。",
+          "minutes": 40
+        },
+        {
+          "title": "调度与上传背压",
+          "instruction": "为 5 亿商品分层轮询和 1000 万并发活动上传估算队列，设计退避、租约、批量与热点隔离。",
+          "minutes": 40
+        },
+        {
+          "title": "派生视图与通知",
+          "instruction": "定义价格曲线、阈值订阅、好友 Feed、排行榜的增量更新与幂等键，写允许的陈旧窗口。",
+          "minutes": 40
+        },
+        {
+          "title": "版本化重算演练",
+          "instruction": "模拟聚合逻辑错误，设计从原始事件回放到新版本视图、影子对比、切流和回滚的完整步骤。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "3) How do we efficiently process price changes and notify subscribed users?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#3-how-do-we-efficiently-process-price-changes-and-notify-subscribed-users"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "1) How can we support tracking activities while offline?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#1-how-can-we-support-tracking-activities-while-offline"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "事件时间与处理时间",
+          "url": "https://ddia.vonng.com/ch12/#id322"
+        }
+      ],
+      "artifact": "一张双系统时间轴与数据血缘图；标出商品轮询计划、价格变化、阈值通知、活动离线点、上传合并、好友实时流和排行榜重算。",
+      "acceptance": [
+        "商品调度能处理抓取频率分层、失败退避、重复价格样本和恶意扩展更新，且不会重复发送阈值通知。",
+        "活动链路能处理离线采样、设备时钟偏差、断点上传、重复 GPS 点和好友实时分享的不同新鲜度。",
+        "价格曲线与排行榜都给出原始事实保留、派生视图版本、回填/重算触发条件和重算期间的读策略。"
+      ],
+      "repair": "若派生表被当作唯一真相源，加入聚合 bug 需要全量重算的反例；指出可重放原始数据、版本化输出和双读校验后再设计。",
+      "algorithms": {
+        "tag": "Graphs",
+        "mode": "review",
+        "problems": [
+          {
+            "title": "Number of Islands",
+            "slug": "number-of-islands",
+            "url": "https://leetcode.com/problems/number-of-islands/"
+          },
+          {
+            "title": "Pacific Atlantic Water Flow",
+            "slug": "pacific-atlantic-water-flow",
+            "url": "https://leetcode.com/problems/pacific-atlantic-water-flow/"
+          },
+          {
+            "title": "Walls and Gates",
+            "slug": "walls-and-gates",
+            "url": "https://leetcode.com/problems/walls-and-gates/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 11,
+      "day": 6,
+      "kind": "mock",
+      "title": "Price Tracking + Strava 双题 Mock",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "时序产品主 Mock",
+          "instruction": "随机抽一题，从规模估算、接口和数据模型到调度/上传、查询与通知完成设计。",
+          "minutes": 45
+        },
+        {
+          "title": "离线与调度切题",
+          "instruction": "另一题连续回答离线恢复、批量上传、周期轮询、任务重复和通知幂等。",
+          "minutes": 30
+        },
+        {
+          "title": "事件质量复盘",
+          "instruction": "逐段标记未处理重复、乱序、时钟偏差、恶意值或丢失的回答，并写用户可见错误。",
+          "minutes": 40
+        },
+        {
+          "title": "重算路径重录",
+          "instruction": "选最低分的派生视图段，从原始事实、版本化计算、校验、切流到回滚完整重答。",
+          "minutes": 45
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "1) How do we efficiently discover and track 500 million Amazon products?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#1-how-do-we-efficiently-discover-and-track-500-million-amazon-products"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "2) How can we scale to support 10 million concurrent activities?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#2-how-can-we-scale-to-support-10-million-concurrent-activities"
+        },
+        {
+          "source_id": "hi.senior.expectations",
+          "page_title": "The System Design Interview: What is Expected at Each Level",
+          "heading": "Depth",
+          "url": "https://www.hellointerview.com/blog/the-system-design-interview-what-is-expected-at-each-level#depth"
+        }
+      ],
+      "artifact": "一份 45 分钟主 Mock、30 分钟切题稿和一张事件质量评分表；评分表覆盖完整性、重复、乱序、时钟偏差、恶意输入和重算能力。",
+      "acceptance": [
+        "Price Tracking 能量化 5 亿商品的发现/轮询预算、通知扇出和价格图表查询；Strava 能量化并发活动、采样写入和实时分享。",
+        "每题至少回答两个深挖，并明确原始事件、派生状态、用户查询和失败恢复之间的数据流。",
+        "能处理一个客户端离线或恶意输入场景和一个后台任务迟到/重复场景，给出校验与补偿。"
+      ],
+      "repair": "若回答只关注正常数据流，从一次设备时间倒退或错误价格批次开始逆推；补质量规则、隔离区、可审计原始事件和视图重建后重录。",
+      "algorithms": {
+        "tag": "Graphs",
+        "mode": "timed",
+        "problems": [
+          {
+            "title": "Clone Graph",
+            "slug": "clone-graph",
+            "url": "https://leetcode.com/problems/clone-graph/"
+          },
+          {
+            "title": "Surrounded Regions",
+            "slug": "surrounded-regions",
+            "url": "https://leetcode.com/problems/surrounded-regions/"
+          },
+          {
+            "title": "Course Schedule",
+            "slug": "course-schedule",
+            "url": "https://leetcode.com/problems/course-schedule/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 11,
+      "day": 7,
+      "kind": "repair",
+      "title": "迟到事件与派生数据复测",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "构造迟到事件集",
+          "instruction": "写 12 个价格/GPS 事件，刻意加入重复、乱序、跨天迟到和时钟回拨，并标出预期接纳规则。",
+          "minutes": 30
+        },
+        {
+          "title": "手算增量结果",
+          "instruction": "按事件到达顺序更新价格曲线、活动统计或排行榜，记录每次状态变化与外部通知。",
+          "minutes": 50
+        },
+        {
+          "title": "全量重放对照",
+          "instruction": "从原始事实重新计算最终结果，定位增量与全量差异，补版本、水位线或幂等规则。",
+          "minutes": 40
+        },
+        {
+          "title": "变更窗口复测",
+          "instruction": "缩短允许迟到窗口并重新判断全部事件，解释用户可见修正、补偿和审计证据。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.camelcamelcamel",
+          "page_title": "Price Tracking Service",
+          "heading": "4) How do we serve fast price history queries for chart generation?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/camelcamelcamel#4-how-do-we-serve-fast-price-history-queries-for-chart-generation"
+        },
+        {
+          "source_id": "hi.breakdown.strava",
+          "page_title": "Strava",
+          "heading": "4) How can we expose a leaderboard of top athletes?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/strava#4-how-can-we-expose-a-leaderboard-of-top-athletes"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "处理滞留事件",
+          "url": "https://ddia.vonng.com/ch12/#id323"
+        }
+      ],
+      "artifact": "一组至少 12 个带 event_time、ingest_time、event_id 的测试事件，以及手算的价格曲线/活动统计期望结果和重放检查表。",
+      "acceptance": [
+        "测试集中同时出现重复、乱序、跨窗口迟到和客户端时钟偏差，并为每个事件写接受、隔离或修正决定。",
+        "增量结果与从原始事件全量重算结果一致；若允许近似或延迟修正，必须给出误差或修正可见时间。",
+        "通知和排行榜不会因重放重复产生外部副作用，使用业务幂等键并有审计查询证明。"
+      ],
+      "repair": "若手算结果不唯一，先固定时间语义、窗口闭合规则与去重键；若全量重算不一致，保留失败样本并定位第一个非确定派生步骤。",
+      "algorithms": {
+        "tag": "Graphs",
+        "mode": "timed",
+        "problems": [
+          {
+            "title": "Max Area of Island",
+            "slug": "max-area-of-island",
+            "url": "https://leetcode.com/problems/max-area-of-island/"
+          },
+          {
+            "title": "Rotting Oranges",
+            "slug": "rotting-oranges",
+            "url": "https://leetcode.com/problems/rotting-oranges/"
+          },
+          {
+            "title": "Course Schedule II",
+            "slug": "course-schedule-ii",
+            "url": "https://leetcode.com/problems/course-schedule-ii/"
+          }
+        ]
+      }
+    }
+  ]
+}

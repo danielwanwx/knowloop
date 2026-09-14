@@ -1,0 +1,316 @@
+{
+  "week": 1,
+  "theme": "读扩展、大文件与同步正确性",
+  "audio_preview": {
+    "title": "Week 1｜Bitly 与 Dropbox 两分钟预听",
+    "script": "这一周用两道看似简单、实际边界完全不同的题建立系统设计的基本动作。Bitly 是极端读多写少：创建短链时要保证 short code 唯一，跳转时则要在一百毫秒内从短码找到原始 URL。先从 API 和访问路径反推数据模型，再判断 Postgres 的唯一索引是否已经足够；只有读流量和热点证明确实需要时，才加入 cache、replica 或 CDN。Dropbox 的困难不是把文件放进对象存储，而是把大字节内容、metadata、权限和多设备同步拆成可恢复的协议。客户端用预签名 URL 分片上传，完成后再以 idempotency key 提交 metadata；对象已经上传但提交失败时，保留可重试状态并延迟回收孤儿 blob。同步正确性来自 change log、cursor 和 pull repair，WebSocket 只负责更快通知。两题放在一起训练一个核心判断：组件名不是答案，必须说清权威状态在哪里、每条请求如何改变状态、失败后用户看到什么，以及什么时候才值得增加复杂度。试听后请先关掉讲义，用一张白板分别重建两题的权威状态和失败路径；只有能解释缓存过期、孤儿对象与权限撤销的修复上界，才算真正完成这一周。"
+  },
+  "projects": [
+    {
+      "slug": "bitly",
+      "title": "Bitly",
+      "source": "hi.breakdown.bitly",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Defining the Core Entities",
+          "The API",
+          "High-Level Design"
+        ],
+        "deliverable": "一张可在 15 分钟讲完的 Bitly 初版白板：FR/NFR、POST /urls、GET /{short_code}、URLMapping schema、create path 与 redirect path。",
+        "acceptance": [
+          "每个 NFR 都量化并能指出它改变了哪一项设计。",
+          "能从 GET /{short_code} 的访问路径推出 short_code 唯一索引和过期语义。",
+          "create 与 redirect 两条路径分开，权威数据库、缓存和返回状态码职责清楚。"
+        ],
+        "repair": "如果一开始就画 Redis、Kafka 或分片，先删除这些盒子，只用单服务加 Postgres 重画可工作的基线，再逐项用瓶颈证据加回组件。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we ensure short urls are unique?",
+          "2) How can we ensure that redirects are fast?",
+          "3) How can we scale to support 1B shortened urls and 100M DAU?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.bitly",
+        "deliverable": "短码分配器、cache-aside redirect、热点与故障矩阵，以及从单库到多地域的触发条件。",
+        "acceptance": [
+          "比较随机码重试、全局计数器和号段分配，能说明唯一性、可用性与可枚举性的取舍。",
+          "说明 302、cache TTL、negative cache、stampede 和数据库故障时的用户语义。",
+          "容量估算能证明 1B 映射并不自动等于必须分片，并给出未来扩展信号。"
+        ],
+        "repair": "答不出唯一性时先画 allocator 状态机；答不出故障时用一次 cache miss 的时序逐跳标出 timeout、retry、fallback 和 metric。"
+      },
+      "concepts": [
+        {"source": "hi.core.api-design", "heading": "HTTP Methods", "why": "把创建、读取、重试与幂等语义写进契约，而不是只列两个 endpoint。"},
+        {"source": "hi.core.data-modeling", "heading": "Indexing for Access Patterns", "why": "从 short_code lookup 与 owner listing 反推主键和二级索引。"},
+        {"source": "hi.core.caching", "heading": "Cache-Aside (Lazy Loading)", "why": "解释 redirect hot path、cache miss 与数据库回源。"},
+        {"source": "hi.core.caching", "heading": "Cache Stampede (Thundering Herd)", "why": "处理热点短链过期时的并发回源。"},
+        {"source": "hi.core.db-indexing", "heading": "B-Tree Indexes", "why": "理解唯一索引的读写成本，避免把索引当成免费魔法。"},
+        {"source": "hi.core.networking-essentials", "heading": "Example: A Simple Web Request", "why": "把 DNS、TLS、负载均衡、service、cache 与 DB 连接成端到端延迟预算。"},
+        {"source": "hi.core.networking-essentials", "heading": "Content Delivery Networks (CDNs)", "why": "判断 CDN 是否真的适合短链重定向及其失效风险。"},
+        {"source": "hi.deep.dynamodb", "heading": "Partition Key and Sort Key", "why": "比较 DynamoDB short_code 分区键与 Postgres 唯一索引的访问模式。"},
+        {"source": "hi.deep.postgres", "heading": "Transactions", "why": "说明 alias 占用、幂等创建和唯一约束如何形成原子边界。"}
+      ],
+      "ddia": [
+        {"source": "ddia.ch2", "heading": "可靠性与容错", "why": "把 99.99% availability 转成组件故障和降级判断。"},
+        {"source": "ddia.ch2", "heading": "可伸缩性", "why": "用负载参数决定何时 cache、复制或分片。"},
+        {"source": "ddia.ch3", "heading": "关系模型与文档模型", "why": "理解简单关系模型为什么足以作为 URL mapping 的权威数据。"},
+        {"source": "ddia.ch4", "heading": "OLTP 系统的存储与索引", "why": "理解读优化带来的写放大和维护成本。"}
+      ],
+      "lecture": [
+        {
+          "title": "先定义重定向语义，再谈架构",
+          "body": "Bitly 的用户故事只有创建短链和按短码跳转，但 API 语义会直接决定缓存与一致性。创建接口应接收 long_url、可选自定义 alias 和过期时间，并使用 idempotency key 防止客户端超时重试时生成多个短链。跳转接口通常返回 302，使浏览器仍回到 Bitly，便于更新目标和记录访问；若产品选择永久不可变的链接才考虑 301。不存在、已过期与被禁用最好分别落到 404、410 或受控错误页，否则缓存无法表达真实状态，运维也无法区分数据缺失和策略封禁。",
+          "takeaway": "状态码、幂等键和过期语义都是数据模型与缓存策略的一部分。"
+        },
+        {
+          "title": "从访问路径反推最小数据模型",
+          "body": "redirect path 的核心查询是按 short_code 精确读出 long_url、status、expires_at，因此 short_code 必须是主键或唯一索引；owner_id + created_at 只在产品要求用户查看自己的链接时才需要二级索引。数据库是 expiry、disabled 与目标 URL 的 source of truth，cache 只存可丢失的投影。使用 Postgres 能用唯一约束和事务快速得到清晰基线；DynamoDB 也能以 short_code 做 partition key，但应先说明条件写、热点 key、二级索引和多地域一致性成本，不能因为题目说“大规模”就直接换库。还要为自定义 alias 的抢占、过期记录的再利用和 owner 查询写出明确约束，否则同一张表在边界请求下仍会产生歧义。",
+          "takeaway": "先列查询，再选 key、index 和数据库；技术名词不能替代访问模式。"
+        },
+        {
+          "title": "短码唯一性是一条写协议",
+          "body": "随机 Base62 码的优点是分散且不容易枚举，但必须依赖数据库唯一约束检测碰撞，并在有限次数内重试；随着码空间利用率增长，碰撞成本会上升。单一全局计数器可保证唯一，却会成为可用性和吞吐瓶颈，也暴露业务规模。更成熟的方案是让 allocator 预分配号段，每个实例在本地单调消费，再做可逆混淆；号段租约、实例崩溃后未用 ID 和重复领取必须有明确状态。面试中不需要一开始实现最复杂方案，而要展示从简单随机重试到号段分配的演化条件。",
+          "takeaway": "唯一性由数据库约束或分配协议保证，不由“随机概率很低”保证。"
+        },
+        {
+          "title": "读路径优化必须保留修复路径",
+          "body": "redirect 是极端读多写少，适合 cache-aside：先查 Redis，miss 再读权威 DB，并写入带 TTL 的 cache。热门 key 过期会造成 stampede，可用 singleflight、提前刷新和 jitter 分散过期；不存在的 short code 可短 TTL negative cache，防止恶意扫描打穿数据库。更新目标或禁用链接时要先改权威状态，再删除或版本化 cache；即使失效消息丢失，TTL 仍应让系统最终收敛。CDN 可以吸收全球热点，但其缓存 key、302 响应、撤销窗口和 abuse 风险必须比普通静态内容更谨慎。设计时要逐层写出最大陈旧窗口、回源并发上限与失效失败指标，才能证明这条读路径可控。",
+          "takeaway": "缓存优化延迟，TTL 与权威回源保证可恢复性；二者职责不同。"
+        },
+        {
+          "title": "容量数字用来拒绝过早分片",
+          "body": "假设 1B 条 URL mapping，每条连同索引约数百字节，数据量仍可能落在单个成熟数据库集群可处理的范围。真正可能先触顶的是 redirect 峰值 QPS、热点分布和跨地域延迟，而不是总行数本身。应分别估算 create QPS、redirect average/peak QPS、cache hit ratio、回源 QPS、存储与带宽，再决定读副本、缓存或分片。分片触发器应可观测，例如主库写吞吐、索引尺寸、checkpoint 或复制延迟持续越界，而不是口头说“用户多就 sharding”。估算还要保留峰均比与增长假设，说明哪个数字变化时会推翻当前单库结论。",
+          "takeaway": "规模题的正确动作是给出负载模型和触发器，不是背诵分布式组件。"
+        },
+        {
+          "title": "Senior 答案要主动讲故障和运营",
+          "body": "Senior 候选人不能停在 happy path。cache 全失效时要限速回源并保护数据库；allocator 不可用时可以暂时只读而不是生成重复码；数据库 failover 时创建接口可重试，但 redirect 是否允许短暂读取旧 cache 要由链接撤销和 availability 优先级决定。还要主动指出 abuse：短码空间可被枚举、恶意 URL 可能借平台传播、热点链接可能成为 DDoS 放大点。可观测指标至少包括 redirect p99、cache hit、DB fallback、allocator collision/retry、410/404 比例和热点 key 分布，这些信号决定下一轮扩展。每个降级还应写清退出条件和数据回补方式，避免临时策略在故障结束后变成永久不一致。",
+          "takeaway": "Senior 深度来自主动识别风险、选择降级并给出恢复证据。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "为什么不直接对 long URL 做 hash 截断成 short code？",
+          "trigger": "候选人说“hash 一下就唯一”，没有讨论碰撞或相同 URL 的产品语义。",
+          "answer": "截断 hash 只能提供概率分散，不能提供数学唯一性；两个不同 URL 仍可能映射到同一 short code，所以写入必须使用唯一约束并在冲突时加盐或重新生成。相同 long URL 是否复用同一短链也是产品选择：若要按用户、过期时间或 campaign 分开统计，就不能只按内容去重。我会先用随机 Base62 + conditional insert 的简单方案，监控 collision rate；当写吞吐或重试成本成为瓶颈，再迁移到号段 allocator。这样唯一性由可验证的写协议保证，而不是由“碰撞很少”保证。",
+          "follow_up": "如果数据库在 conditional insert 后响应丢失，客户端重试如何避免生成第二个短链？",
+          "common_miss": "把 hash 冲突概率低等同于不存在；忽略同一 long URL 的多租户语义。",
+          "repair": "画出 generate → conditional insert → conflict/retry → response 丢失后的完整状态机。",
+          "sources": [
+            {"source": "hi.breakdown.bitly", "heading": "1) How can we ensure short urls are unique?"},
+            {"source": "hi.deep.postgres", "heading": "Transactions"}
+          ]
+        },
+        {
+          "question": "redirect path 为什么选择 302，而不是 301？",
+          "trigger": "候选人只说两者都是重定向，或认为 301 一定更快。",
+          "answer": "301 会鼓励客户端和中间缓存长期记住目标，后续请求可能绕过 Bitly；这能降低服务端流量，却会削弱点击统计、目标更新、撤销和恶意链接封禁。302 让每次访问仍回到服务端，可执行状态检查并保留运营控制，代价是多一次网络和缓存成本。我会根据产品是否允许目标改变、是否需要实时撤销和分析来选择；若提供不可变链接层级，可让那一类明确使用长期缓存，而不是对所有链接一刀切。",
+          "follow_up": "如果必须在一分钟内撤销恶意热点链接，CDN 和 browser cache 如何配合？",
+          "common_miss": "只从 HTTP 定义回答，没有连接到 analytics、撤销与缓存。",
+          "repair": "列出 301/302 对控制权、延迟、统计和失效窗口的四列表。",
+          "sources": [
+            {"source": "hi.breakdown.bitly", "heading": "2) How can we ensure that redirects are fast?"},
+            {"source": "hi.core.caching", "heading": "CDN (Content Delivery Network)"}
+          ]
+        },
+        {
+          "question": "一个明星短链突然成为热点，缓存已经有值，为什么还可能出问题？",
+          "trigger": "候选人认为 cache hit 就意味着热点已经解决。",
+          "answer": "热点仍会集中到单个 Redis shard、单个网络连接池或同一 CDN origin；如果 key 过期，所有请求还会同时回源形成 stampede。解决顺序是先测量热点位置，再做本地 in-process cache、CDN/edge cache、热点 key replication 或 request coalescing，并为 TTL 加 jitter 与提前刷新。失效路径同样重要：复制越多，撤销窗口越难收敛，所以恶意链接状态可用短 TTL 或版本号快速覆盖。优化目标不是“更多 cache”，而是让热点读量和失效成本都可控。",
+          "follow_up": "若热点 key 已被禁用，但某个 region 的失效事件丢失，如何限制错误跳转窗口？",
+          "common_miss": "只回答加机器或增加 TTL，没有故障与撤销语义。",
+          "repair": "画出热点 key 在 edge、process cache、Redis 和 DB 四层的命中与失效时序。",
+          "sources": [
+            {"source": "hi.core.caching", "heading": "Hot Keys"},
+            {"source": "hi.core.caching", "heading": "Cache Stampede (Thundering Herd)"}
+          ]
+        },
+        {
+          "question": "1B URLs 是否意味着现在必须分片？",
+          "trigger": "候选人看到十亿就直接画 shard router。",
+          "answer": "不能只用行数下结论。我会先估每条记录和索引的字节数，得到存储规模；再估 create 和 redirect 的平均/峰值 QPS、读写比、cache hit 与回源 QPS。URL mapping 很小且读多写少，单个 Postgres 集群配读缓存可能已经足够，过早分片会增加全局唯一、再平衡、跨 shard 运营查询和恢复复杂度。只有当主库写吞吐、索引/备份窗口、复制延迟或单节点容量持续触顶时才引入分片，并选择能保持 short_code lookup 单分区的 key。",
+          "follow_up": "如果要支持 owner 列表查询，按 short_code 分片会带来什么新问题？",
+          "common_miss": "没有任何数字，也没有说明分片的代价。",
+          "repair": "写一张 storage/QPS/cache-hit 假设表，并给出三条可观测分片 trigger。",
+          "sources": [
+            {"source": "hi.breakdown.bitly", "heading": "3) How can we scale to support 1B shortened urls and 100M DAU?"},
+            {"source": "ddia.ch2", "heading": "可伸缩性"}
+          ]
+        },
+        {
+          "question": "数据库故障时，redirect 应该 fail-open 读旧缓存还是 fail-closed？",
+          "trigger": "候选人笼统回答“为了高可用继续服务”或“为了一致性全部失败”。",
+          "answer": "这是业务风险选择，不是 CAP 口号。普通不可变短链在 DB 暂时不可用时，可以从带版本和有限 TTL 的旧缓存继续重定向，以保护 availability；但刚被禁用、过期或涉嫌恶意的链接不能无限 fail-open。可以把 revoke 状态放在更短 TTL 的 deny cache，或让高风险域名强制回权威路径。恢复后要限制回源并监控旧版本占比。答案必须明确哪些状态允许陈旧、最大窗口多长、如何发现和结束降级，而不是对整个系统统一选 C 或 A。",
+          "follow_up": "网络分区只影响一个 region 时，如何防止该 region 永久读取旧 cache？",
+          "common_miss": "没有区分普通链接与撤销链接，也没有恢复条件。",
+          "repair": "为 active、expired、disabled、malicious 四种状态分别写 fail-open/fail-closed 策略。",
+          "sources": [
+            {"source": "hi.core.cap-theorem", "heading": "When to Choose Availability"},
+            {"source": "hi.breakdown.bitly", "heading": "Senior"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "dropbox",
+      "title": "Dropbox",
+      "source": "hi.breakdown.dropbox",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 upload、download、share、sync 四条主路径的 Dropbox 白板，分清 blob、metadata、ACL、version 与 change log。",
+        "acceptance": [
+          "大文件字节流不经过应用服务器，控制面与数据面分离。",
+          "metadata commit 才让新版本可见，上传成功不等于文件已提交。",
+          "通知只加速同步，cursor pull/replay 才是丢事件后的正确性修复路径。"
+        ],
+        "repair": "若把对象存储和 metadata 当成一个原子数据库，重画 uploading → uploaded → committed 状态机，并标出 orphan blob 的回收。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can you support large files?",
+          "2) How can we make uploads, downloads, and syncing as fast as possible?",
+          "3) How can you ensure file security?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.dropbox",
+        "deliverable": "resumable multipart、metadata/blob 一致性、change-log cursor、冲突副本、ACL 撤销和 failure matrix。",
+        "acceptance": [
+          "能解释分片上传、重试、最终 hash 校验、幂等 commit 与 orphan GC。",
+          "能证明通知丢失或设备离线后仍会通过 cursor replay 最终收敛。",
+          "权限检查、短期签名 URL、CDN 缓存和撤销窗口有明确边界。"
+        ],
+        "repair": "若回答只剩 S3、CDN、WebSocket 三个名词，逐条写出权威状态、版本号、幂等键、失败后用户状态和恢复指标。"
+      },
+      "concepts": [
+        {"source": "hi.pattern.large-blobs", "heading": "Resumable Uploads for Large Files", "why": "把 50GB 文件拆成可校验、可重试的分片协议。"},
+        {"source": "hi.pattern.large-blobs", "heading": "State Synchronization Challenges", "why": "理解对象存储与 metadata 之间没有免费事务。"},
+        {"source": "hi.pattern.large-blobs", "heading": "\"How do you ensure downloads are fast?\"", "why": "把预签名 URL、CDN 与权限验证连接起来。"},
+        {"source": "hi.pattern.realtime-updates", "heading": "Websockets: The Full-Duplex Champion", "why": "选择连接协议，但不把连接等同于同步正确性。"},
+        {"source": "hi.pattern.realtime-updates", "heading": "\"How do you handle connection failures and reconnection?\"", "why": "设计断线后的 cursor catch-up 和顺序恢复。"},
+        {"source": "hi.core.networking-essentials", "heading": "Timeouts and Retries with Backoff", "why": "约束分片上传、commit 和下载重试的放大风险。"},
+        {"source": "hi.core.caching", "heading": "CDN (Content Delivery Network)", "why": "加速热门下载并分析权限撤销后的缓存窗口。"},
+        {"source": "hi.deep.dynamodb", "heading": "Secondary Indexes", "why": "比较 file_id、namespace/path 与 owner/share 访问模式。"},
+        {"source": "hi.deep.postgres", "heading": "Data Consistency", "why": "把 metadata version、ACL 和提交事务放在权威边界。"},
+        {"source": "hi.core.cap-theorem", "heading": "Different Levels of Consistency", "why": "区分 metadata commit、listing、presence 与 CDN 内容的一致性要求。"}
+      ],
+      "ddia": [
+        {"source": "ddia.ch2", "heading": "可靠性与容错", "why": "把不能丢文件转成可测试的上传、提交与恢复行为。"},
+        {"source": "ddia.ch4", "heading": "OLTP 系统的存储与索引", "why": "为 path listing、share lookup 和 change sequence 选择访问结构。"},
+        {"source": "ddia.ch6", "heading": "复制延迟的问题", "why": "解释设备或 region 看到旧 metadata 的用户语义。"},
+        {"source": "ddia.ch9", "heading": "故障与部分失效", "why": "处理 blob 成功、metadata 失败和通知丢失等跨系统故障。"}
+      ],
+      "lecture": [
+        {
+          "title": "把 Blob 与 Metadata 分开建模",
+          "body": "Dropbox 的大字节内容适合不可变对象存储，而文件名、namespace、owner、ACL、当前 version、content hash 和同步 sequence 属于 metadata store。二者优化目标不同：对象存储提供高耐久和大吞吐，metadata 需要小记录事务、索引和权限判断。应用服务负责控制面：鉴权、创建 upload session、签发短期 URL、提交版本和发布 change event；客户端直接和对象存储交换字节。这样 50GB 文件不会占满应用服务器带宽，同时也能把“对象存在”与“文件对用户可见”明确分开。白板上必须用不同边界标出控制面和数据面，避免把上传成功误说成版本已经提交。",
+          "takeaway": "对象存储拥有字节，metadata store 拥有文件语义；只有后者能宣布版本可见。"
+        },
+        {
+          "title": "上传是两阶段可恢复协议",
+          "body": "客户端先创建 upload session，服务端记录 file_id、base_version、part size、预期 hash 与 idempotency key。每个 part 独立上传、校验并可重试，完成后客户端发 commit；服务端验证对象完整性和权限，再用条件更新把 current_version 原子前进并追加 change log。对象上传成功但 commit 超时，不应重新上传全部字节，而应查询 session 并用同一幂等键继续。最终未被 metadata 引用的 orphan blob 由延迟 GC 清理，不需要跨数据库与对象存储的分布式事务。服务还要区分 part 重传、完整对象校验失败和 metadata 条件写冲突，让客户端知道该续传、重算还是创建冲突版本。",
+          "takeaway": "先保存不可变字节，再原子提交引用；重试和 GC 取代跨存储事务。"
+        },
+        {
+          "title": "同步正确性来自 Change Log 与 Cursor",
+          "body": "每个 namespace 维护单调 change sequence，设备保存已经成功应用的 cursor。新版本提交后写入 change log，push/WebSocket 只负责唤醒在线设备；设备随后从 cursor 拉取增量，在本地事务成功后才推进 cursor。通知丢失、合并或乱序只会增加 freshness，因为周期 pull 与 replay 仍能补齐。服务端按 event_id/version 幂等，客户端检测 sequence gap 并请求缺口。把同步建立在可重放日志上，才能解释离线数天、连接切换和进程崩溃后的最终收敛。日志保留期之外则返回带基准 sequence 的完整 snapshot，完成后再恢复增量读取，不能假装旧 cursor 永远有效。",
+          "takeaway": "通知是加速器，cursor pull 是证明不丢变更的 repair path。"
+        },
+        {
+          "title": "并发修改必须有用户可见语义",
+          "body": "每次提交携带 base_version。若服务端 current_version 已经前进，说明两台设备从同一旧版本分叉。对一般二进制文件，安全做法是保留两个版本、生成 conflict copy 或要求用户选择；静默 last-write-wins 会不可察觉地丢数据。对可合并文本可另建 merge 语义，但这已经接近 Google Docs 的 operation ordering 题。rename、delete 与 restore 也应成为带版本的 metadata event，删除用 tombstone 保留足够时间，使离线设备重连时不会把已删文件再次上传为当前状态。冲突策略必须成为用户可见契约，并通过 parent version 保留审计和回滚路径。",
+          "takeaway": "冲突不是异常日志，而是必须设计的产品状态和恢复流程。"
+        },
+        {
+          "title": "下载性能不能绕过权限",
+          "body": "下载请求先在 metadata 路径验证 ACL、版本和可见性，再签发短时效 presigned URL，让客户端直接从对象存储或 CDN 拉取。热门公共文件适合 CDN，但私有共享文件的 cache key、签名过期和权限撤销必须限制暴露窗口。撤销权限后应立即更新权威 ACL，并使新签名失败；已发出的短期 token 和 CDN 副本只能在承诺窗口内收敛。已经下载到离线设备的字节无法远程魔法删除，应把这一现实边界明确告诉面试官。",
+          "takeaway": "CDN 降低延迟，短期签名和权威 ACL 限制它带来的撤销风险。"
+        },
+        {
+          "title": "Senior 答案要覆盖局部失败与运营信号",
+          "body": "metadata 主库不可用时，应停止产生新 current_version，避免同一文件出现多个权威头；已经 commit 的文件可在 ACL 允许下从缓存或对象存储降级只读。对象存储慢时保留 upload session 并退避重试，不能让客户端无限并发。通知服务故障不影响正确性，但会拉高 sync freshness。需要观测 upload-to-commit completion、part retry、orphan blob、cursor lag、conflict rate、ACL deny、签名 URL 失败和 CDN stale window；这些指标直接回答用户的文件是否真的保存、同步和受保护。Senior 回答还要把告警阈值连到具体 runbook：先保护 metadata，再暂停回收，最后按 cursor 与引用表完成对账。",
+          "takeaway": "每个依赖都要定义检测、降级、恢复和用户可见状态。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "为什么不让文件先经过应用服务器再写对象存储？",
+          "trigger": "候选人画了 client → API server → S3 的整文件数据路径。",
+          "answer": "应用服务器适合鉴权和 metadata，不适合承担 50GB 文件的双倍网络带宽、连接时长和重试状态。更稳妥的方案是先创建受 ACL 约束的 upload session，再给客户端短期预签名 URL 直接上传对象存储；应用只在 commit 时验证 content hash、size、base version 和权限。这样数据面可以独立扩展，应用故障也不会迫使已上传分片重传。代价是要显式设计 session、part 校验、过期、滥用限制和 metadata commit，不能把 presigned URL 当成跳过授权的捷径。",
+          "follow_up": "客户端拿到 URL 后上传了超大或错误 MIME 文件，服务端如何阻止它成为可见版本？",
+          "common_miss": "只说“省带宽”，没有提交协议、权限和校验。",
+          "repair": "画 control plane 与 data plane，并标出每一步授权、hash 和状态。",
+          "sources": [
+            {"source": "hi.pattern.large-blobs", "heading": "Simple Direct Upload"},
+            {"source": "hi.breakdown.dropbox", "heading": "1) How can you support large files?"}
+          ]
+        },
+        {
+          "question": "对象已上传成功，但 metadata commit 超时，系统现在是什么状态？",
+          "trigger": "候选人说用分布式事务，或直接重新上传。",
+          "answer": "对象此时只是不可见的候选 blob，文件的 current_version 仍由 metadata 决定。客户端用同一 idempotency key 查询或重试 commit；服务端若已提交就返回同一 version，若未提交则验证 blob/hash 后执行条件更新。如果最终不再重试，session 到期后 GC 扫描没有 metadata 引用的 blob。这样不需要让对象存储参与数据库事务，也不会把半完成上传展示给其他设备。用户界面应显示 pending/retry，而不是错误地显示“已同步”。",
+          "follow_up": "GC 如何避免删除一个 commit 刚成功但索引尚未可见的对象？",
+          "common_miss": "把对象存在等同于文件版本已生效。",
+          "repair": "写出 uploading、uploaded、committed、expired 四状态和幂等转移。",
+          "sources": [
+            {"source": "hi.pattern.large-blobs", "heading": "State Synchronization Challenges"},
+            {"source": "ddia.ch9", "heading": "故障与部分失效"}
+          ]
+        },
+        {
+          "question": "如果 WebSocket 通知丢了，为什么你仍能保证设备最终同步？",
+          "trigger": "候选人把 WebSocket/Kafka 说成唯一同步来源。",
+          "answer": "正确性依赖可重放 change log，而不是瞬时通知。每个 namespace 有单调 sequence，设备只在本地成功应用事件后推进 cursor；WebSocket 只告诉设备“有新版本”，随后设备仍按 cursor 拉取。通知丢失时，周期 pull、应用重新前台或重连都会请求 cursor 之后的事件；发现 gap 时可以补洞。事件带稳定 ID/version，重放是幂等的。因此丢通知影响 freshness，不会永久丢文件。需要监控 cursor lag 和 gap repair，而不是只看连接数。",
+          "follow_up": "change log 保留期结束，而某设备离线更久怎么办？",
+          "common_miss": "回答自动重连，但没有 cursor、gap 和 retention。",
+          "repair": "画通知丢失后的 pull replay 时序，并定义 full resync 触发条件。",
+          "sources": [
+            {"source": "hi.breakdown.dropbox", "heading": "2) How can we make uploads, downloads, and syncing as fast as possible?"},
+            {"source": "hi.pattern.realtime-updates", "heading": "\"How do you handle connection failures and reconnection?\""}
+          ]
+        },
+        {
+          "question": "两台离线设备同时修改同一文件，为什么不用 last-write-wins？",
+          "trigger": "候选人用时间戳选最新版本，未讨论时钟与数据丢失。",
+          "answer": "last-write-wins 会把一个真实用户版本静默覆盖，而且客户端时钟不能作为可靠全局顺序。提交应携带 base_version；服务端发现 current_version 已变化时把它识别为并发分叉。对二进制文件可保存 conflict copy 或让用户选择，对可合并文本另走 merge 流程。两个版本都保留可审计 parent，后续清理有明确策略。这样用户至少看得到冲突并能恢复。Dropbox 与 Google Docs 的差别也在这里：前者以文件版本为原子单位，后者需要 operation 级收敛。",
+          "follow_up": "rename 与 delete 并发时，冲突副本策略如何调整？",
+          "common_miss": "假设服务端收到顺序就是用户因果顺序。",
+          "repair": "用 base_version 画出两个客户端从 v7 分叉、服务端收到 v8/v9 的处理。",
+          "sources": [
+            {"source": "hi.breakdown.dropbox", "heading": "Senior"},
+            {"source": "hi.core.cap-theorem", "heading": "Different Levels of Consistency"}
+          ]
+        },
+        {
+          "question": "共享权限刚被撤销，但 CDN 仍有文件副本，如何定义安全边界？",
+          "trigger": "候选人说 purge CDN 即可，或忽略已签发 URL。",
+          "answer": "先承认撤销不是瞬时魔法。权威 ACL 更新后，服务端不再签发新 URL；现有 token 必须短时效、绑定对象版本和权限范围，CDN cache key 不能把私有内容当公共对象共享。高敏感文件可要求每次经鉴权 edge 或完全不进入长 TTL CDN。撤销事件触发 purge 只是加速，真正的上界由 token/TTL 决定。已经下载到离线设备的内容无法回收，应明确为产品和合规边界，并以审计记录证明撤销时间和后续访问。",
+          "follow_up": "如果 CDN purge API 部分失败，你用什么指标证明暴露窗口没有超出承诺？",
+          "common_miss": "没有 token TTL、版本化 cache key 或现实的离线边界。",
+          "repair": "列出 ACL、presigned URL、CDN cache 与本地下载四层的撤销能力和最大窗口。",
+          "sources": [
+            {"source": "hi.breakdown.dropbox", "heading": "3) How can you ensure file security?"},
+            {"source": "hi.core.caching", "heading": "CDN (Content Delivery Network)"}
+          ]
+        }
+      ]
+    }
+  ]
+}

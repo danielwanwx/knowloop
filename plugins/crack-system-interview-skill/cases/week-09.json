@@ -1,0 +1,652 @@
+{
+  "week": 9,
+  "theme": "抓取、索引、权限与搜索质量",
+  "audio_preview": {
+    "title": "Week 9｜新闻、帖子搜索与爬虫两分钟预听",
+    "script": "这一周沿着“发现内容、形成索引、把结果稳定交给用户”这条链学习三个系统。News Aggregator 从数千发布源抓取文章，做规范化、去重、媒体处理和 feed 排序；FB Post Search 把高频帖子与点赞变更投影成倒排索引，同时守住可见性和删除；Web Crawler 则管理十亿级 URL frontier，在故障、重试和 robots.txt 约束下持续推进。三题都不能把 Elasticsearch、Kafka 或 Bloom Filter 当作答案。你必须先指出权威事实在哪里，再画可重放的变更日志、幂等消费者和可重建索引。搜索页可以短暂落后，但隐私变更、删除和 robots 策略要有优先覆盖路径。分页也不是一个 offset 参数：新闻和搜索结果在持续变化，cursor 必须绑定稳定排序键和快照边界，才能减少重复与漏项。深挖时用具体指标检查设计：frontier oldest age、抓取成功率、index lag、权限泄漏、zero-result、热点查询和队列背压。最终目标是能解释一条内容从被发现、被验证、被索引到被展示的完整生命线，并证明任意 worker 崩溃后既不会永久丢失进度，也不会绕过来源方与用户设定的边界。"
+  },
+  "projects": [
+    {
+      "slug": "google-news",
+      "title": "News Aggregator",
+      "source": "hi.breakdown.google-news",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 publisher ingestion、article normalization/dedupe、media pipeline、feed materialization、cursor pagination 和 redirect 的 News Aggregator 白板。",
+        "acceptance": [
+          "发布源抓取、文章权威记录和用户 feed 投影分层，索引可从日志重建。",
+          "feed cursor 绑定稳定排序键，不依赖会随插入漂移的 offset。",
+          "30 分钟新鲜度、200ms 读取和 breaking-news 峰值分别有可观测预算。"
+        ],
+        "repair": "若设计直接从 publisher 请求拼 feed，先补 ingestion frontier、canonical Article、dedupe key、index/feed projection 与失败重试，再画用户读路径。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we improve pagination consistency and efficiency?",
+          "2) How do we achieve low latency (< 200ms) feed requests?",
+          "3) How do we ensure articles appear in feeds within 30 minutes of publication?",
+          "4) How do we handle media content (images/videos) efficiently?",
+          "5) How do we handle traffic spikes during breaking news?",
+          "Bonus Deep Dives",
+          "6) How can we support category-based news feeds (Sports, Politics, Tech, etc.)?",
+          "7) How do we generate personalized feeds based on user reading behavior and preferences?"
+        ],
+        "senior_source": "hi.senior.expectations",
+        "senior_headings": [
+          "Breadth",
+          "Depth",
+          "Proactiveness"
+        ],
+        "source_gap": "News Aggregator 当前项目页没有 What is Expected at Each Level?/Senior 小节；Senior 标尺引用通用等级说明，并由本项目 acceptance、Q&A 与 repair 补足。",
+        "deliverable": "稳定 cursor、feed cache/materialization、30 分钟 ingestion SLO、媒体 CDN、breaking-news 热点与 personalization fallback 矩阵。",
+        "acceptance": [
+          "cursor 能在新文章持续插入时解释重复、漏项和 snapshot 边界。",
+          "从 source polling 到 feed 可见的每段 lag 均可测量并能定位瓶颈。",
+          "热点、个性化服务故障和媒体处理积压都有明确降级而不阻断基础 feed。"
+        ],
+        "repair": "如果只会说 cache feed，拆成 ingest age、dedupe lag、index lag、ranking latency、cache age 五段，并为每段写 owner、SLO 和 fallback。"
+      },
+      "concepts": [
+        {
+          "source": "hi.core.api-design",
+          "heading": "Pagination",
+          "why": "为持续插入的新闻 feed 设计稳定 cursor，而非深 offset。"
+        },
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "Add External Caching Layers",
+          "why": "吸收热门首页和 breaking-news 读峰值，同时控制陈旧。"
+        },
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Managing Queue Backpressure",
+          "why": "让抓取、解析、媒体处理和索引在积压时有界降级。"
+        },
+        {
+          "source": "hi.deep.kafka",
+          "heading": "Retention Policies",
+          "why": "保留足够事件以重建 feed/index，又限制无限存储增长。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Normalization vs Denormalization",
+          "why": "区分 canonical Article 与面向类别、用户的 feed item 投影。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch11",
+          "heading": "分布式作业编排",
+          "why": "组织大规模 publisher polling、解析和媒体任务。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "保持系统同步",
+          "why": "让文章事实、搜索索引和 feed projection 可追踪收敛。"
+        },
+        {
+          "source": "ddia.ch4",
+          "heading": "物化视图与多维数据集",
+          "why": "理解类别 feed 和热门榜单作为派生读模型的维护成本。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "先建立可恢复的内容接入链",
+          "body": "每个 publisher 有抓取策略、feed URL、last_success、next_due 和退避状态。scheduler 只把到期 source 放入持久化队列，worker 使用条件 lease 领取，下载后保存原始响应摘要并解析 Article。规范化 canonical URL、发布时间、标题和来源，再用 URL、内容 fingerprint 与来源 ID 去重。权威 Article 提交后写事件，索引、类别 feed、媒体处理分别消费。某个 consumer 失败只造成对应投影延迟，不应迫使重新抓取外站；checkpoint 与 replay 让故障恢复从已确认位置继续。每个阶段保存 attempt、错误类型和处理版本，便于重新解析、来源级熔断和端到端新鲜度归因。",
+          "takeaway": "抓取事实只提交一次，后续索引与 feed 都由可重放事件派生。"
+        },
+        {
+          "title": "文章去重要保留来源与版本",
+          "body": "同一新闻可能由转载、canonical URL 变化或标题轻微修改产生多条记录。只按 URL 去重会漏掉镜像，只按内容 hash 又可能合并不同版本。可以先规范化 URL 和 tracking 参数，再组合 publisher article ID、canonical tag、正文 fingerprint 与时间窗口生成候选簇，最终保留 canonical Article 和多个 SourceOccurrence。后续修订以 version/event 更新，不覆盖原始出处。去重属于可修正判断，错误合并要能拆分并重建 feed；指标包括 duplicate cluster size、merge reversal 和 source coverage。人工纠错必须产生新关联版本并触发受影响索引和 feed 重算，不能直接覆写历史证据。",
+          "takeaway": "去重生成可审计的关联，不应抹掉来源或历史版本。"
+        },
+        {
+          "title": "稳定分页需要排序边界",
+          "body": "offset 分页在新文章插入或排名变化时会重复和漏掉结果。cursor 应编码最后一项的稳定复合排序键，例如 published_at、score bucket 和 article_id，并携带 feed generation 或 snapshot watermark。下一页只读取严格落在边界之后的数据；若个性化模型改变，可选择继续旧 generation 或明确刷新 feed。cursor 必须签名、防篡改且有过期策略。对无限滚动，服务端限制页大小和最大历史窗口，客户端按 article_id 去重。监控 cursor error、duplicate exposure 和 page latency。删除或安全下架仍由读取时 deny 过滤覆盖旧快照，避免稳定分页成为撤销内容的后门。",
+          "takeaway": "cursor 是查询快照与排序规则的契约，不只是数据库主键。"
+        },
+        {
+          "title": "低延迟 feed 来自分层物化与降级",
+          "body": "基础全球或类别 feed 可以预计算并缓存，用户请求只做轻量过滤、个性化重排和分页；活跃用户可异步物化前几页，长尾用户在请求时合并类别候选。缓存 key 带 feed generation 和 locale，TTL 加 jitter，breaking news 通过事件主动刷新。个性化服务超时则回退地区/类别热门，不阻断基础内容。详情页从 Article 服务读取并重定向 publisher。端到端 200ms 预算应拆为 gateway、feed fetch、filter/rank 和 serialization，而不是笼统给 Redis。每个 fallback 都要在响应和指标中可见，防止系统长期降级却仍被误认为正常。",
+          "takeaway": "先准备可复用候选，再把个性化限制为有超时的可选步骤。"
+        },
+        {
+          "title": "30 分钟新鲜度要拆成可测流水线",
+          "body": "“文章 30 分钟内出现”包含 publisher 发现间隔、fetch queue age、解析、去重、索引、ranking 和 cache refresh。不同来源按更新频率和重要性动态调整 polling，支持 RSS/webhook 的来源优先用推送；失败采用带上限退避，不能因一个坏源拖住队列。每条 Article 保存 discovered_at、fetched_at、indexed_at、feed_visible_at，按来源计算分位数和漏抓率。积压时优先可信高价值来源，延后媒体转码或个性化，仍先让文本进入基础 feed。报警必须指出超时发生在哪一段、影响哪些来源和多少文章，并给出下一次追赶完成时间。",
+          "takeaway": "新鲜度 SLO 必须能定位到流水线阶段，才有可执行修复。"
+        },
+        {
+          "title": "媒体和 breaking news 是独立压力源",
+          "body": "图片与视频不应经过 feed API 同步转码。接入后把原始媒体写对象存储，异步做安全扫描、缩略图和格式转换，CDN 用内容版本 URL 分发；处理未完成时 feed 显示占位，不阻塞文章。breaking news 会同时造成 publisher 更新、用户读取和相同媒体热点，入口用队列吸收写峰值，边缘缓存热门 feed 与资源，保护权威库。若 CDN 或媒体管道故障，可退回文本卡片。指标分开观察 fetch burst、media backlog、origin egress 和 hot-key hit。紧急撤回媒体时使用短期 deny 与版本化 URL，让安全操作不依赖所有边缘缓存同时失效。",
+          "takeaway": "把媒体作为异步派生资产，文本 feed 才能在峰值下继续服务。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "新闻不断插入时，cursor 如何减少重复和漏项？",
+          "trigger": "候选人仍使用 page/offset，或 cursor 只保存 article_id。",
+          "answer": "cursor 应绑定本次 feed 的排序规则和边界，例如 generation、snapshot watermark、last_score、published_at 与 article_id，并经过签名。后续查询只返回严格位于复合键之后的项；在同一 generation 内，新插入文章不会把已读项向后推。排名模型更新时可让旧 cursor 继续旧 generation，用户刷新才进入新版；若必须混合，则客户端按 article_id 去重并接受有限漏项。服务端限制 cursor 生命周期，监控重复曝光、空页和 cursor 失效，不能假装无限滚动具有数据库快照级稳定性。",
+          "follow_up": "热门新闻分数在翻页过程中剧烈变化时，是固定快照还是允许重排？",
+          "common_miss": "只把 offset 编码成 Base64，实际漂移问题没有改变。",
+          "repair": "用三篇新文章插入前后演算 offset 与复合 cursor 的结果差异。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-news",
+              "heading": "1) How can we improve pagination consistency and efficiency?"
+            },
+            {
+              "source": "hi.core.api-design",
+              "heading": "Pagination"
+            }
+          ]
+        },
+        {
+          "question": "如何把 feed p95 控制在 200ms，而不是只说加缓存？",
+          "trigger": "候选人没有候选准备、预算拆分或 fallback。",
+          "answer": "先把地区/类别候选 feed 预计算并放在区域缓存，用户请求读取有限候选后做 block、locale 和轻量个性化。给 gateway、cache fetch、filter/rank、serialization 各自预算，所有远程个性化调用都有短 timeout；超时回退基础热门 feed。活跃用户可异步物化首屏，长尾用户按需合并。缓存 miss 使用 singleflight 并限制回源，响应带 generation。监控各阶段分位数、cache hit、fallback rate 和 candidate count，才能知道下一步优化是索引、网络还是 ranking，而不是继续堆缓存。",
+          "follow_up": "缓存全失效时如何避免同时重建数百万用户 feed？",
+          "common_miss": "缓存作为唯一答案，没有 miss 和恢复风暴策略。",
+          "repair": "画 200ms waterfall，并给每个远程调用 timeout 与 fallback。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-news",
+              "heading": "2) How do we achieve low latency (< 200ms) feed requests?"
+            },
+            {
+              "source": "hi.pattern.scaling-reads",
+              "heading": "Add External Caching Layers"
+            }
+          ]
+        },
+        {
+          "question": "如何证明文章在发布后 30 分钟内进入 feed？",
+          "trigger": "候选人只提高 polling 频率，没有端到端时间线。",
+          "answer": "我会为每篇文章记录 publisher_published_at、discovered_at、fetched_at、parsed_at、indexed_at 和 feed_visible_at，并按来源计算端到端与分段 p95/p99。scheduler 根据来源更新频率、可靠性和价值动态安排，下游队列按 deadline 与来源优先级处理；RSS/webhook 减少发现等待。若媒体或个性化积压，先发布可用文本到基础 feed。任何阶段超预算都能从 oldest queue age 和时间戳定位，失败源进入退避而不阻塞其他来源。30 分钟因此是可报警、可追责的 SLO，不是平均抓取周期。",
+          "follow_up": "publisher 的发布时间不可信或时区错误时，SLO 起点如何定义？",
+          "common_miss": "只看最终 index lag，无法区分发现慢还是处理慢。",
+          "repair": "为一篇文章填完整阶段时间戳并设计三条阶段报警。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-news",
+              "heading": "3) How do we ensure articles appear in feeds within 30 minutes of publication?"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Managing Queue Backpressure"
+            }
+          ]
+        },
+        {
+          "question": "breaking news 时读写同时暴涨，先保护什么？",
+          "trigger": "候选人只说自动扩容，没有优先级和降级。",
+          "answer": "先保护 canonical Article 提交和基础文本 feed，因为它们决定内容可见；媒体转码、深度个性化和低价值来源抓取可以延后。入口队列吸收抓取与索引峰值，按来源与 deadline 调度；热门 feed 和静态媒体由 CDN/区域缓存承载，miss 用 request coalescing 保护数据库。个性化超时回退类别热门，媒体缺失显示占位。系统监控 ingest oldest age、feed cache hit、origin QPS、media backlog 和 fallback rate，并对同一热点资源做单独容量隔离，避免一个事件拖垮所有类别。",
+          "follow_up": "错误新闻被缓存到边缘后，如何快速撤回？",
+          "common_miss": "所有任务同等处理，峰值时关键路径被后台工作挤占。",
+          "repair": "把流水线任务分 P0/P1/P2，并为每级写丢弃、延后和恢复规则。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-news",
+              "heading": "5) How do we handle traffic spikes during breaking news?"
+            },
+            {
+              "source": "hi.core.caching",
+              "heading": "Hot Keys"
+            }
+          ]
+        },
+        {
+          "question": "项目页没有 Senior 等级小节，怎样仍给出 Senior 标准？",
+          "trigger": "候选人把缺少项目锚点当成无需覆盖等级预期。",
+          "answer": "我会明确记录 source gap，不伪造项目 anchor；等级标尺引用 Hello Interview 通用 Senior 说明，再把 breadth、depth 和 proactiveness 映射到本题证据。breadth 是主动覆盖 ingestion、feed、media 与运营；depth 是对 cursor、新鲜度和热点至少一项讲清状态与故障；proactiveness 是在被问前指出 publisher 不可靠、索引可重建、个性化可降级。验收以本项目 deliverable、Q&A 和 metrics 为准，并保留来源边界，让学习者知道哪些是原项目内容、哪些是通用等级要求。",
+          "follow_up": "Staff+ 相比 Senior 还应增加哪些组织和成本视角？",
+          "common_miss": "猜测一个不存在的 #senior fragment，破坏来源可审计性。",
+          "repair": "列出三条通用 Senior 维度，并各配一个 News Aggregator 可观察证据。",
+          "sources": [
+            {
+              "source": "hi.senior.expectations",
+              "heading": "Depth"
+            },
+            {
+              "source": "hi.breakdown.google-news",
+              "heading": "Bonus Deep Dives"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "fb-post-search",
+      "title": "FB Post Search",
+      "source": "hi.breakdown.fb-post-search",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "Scale estimations",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 Post 权威库、visibility、CDC/indexing、倒排索引、recency/like 排序、cache 与删除覆盖的 FB Post Search 白板。",
+        "acceptance": [
+          "帖子和权限是权威事实，搜索索引只是可重建投影。",
+          "关键词、短语、recency 和 like count 对应明确索引结构，而非请求时全量排序。",
+          "删除和权限收紧有比普通索引更新更快的 deny/final check。"
+        ],
+        "repair": "若设计只写 Elasticsearch，补画 Post write、outbox/CDC、index document、visibility filter、reindex 和 deletion lag，再解释每个状态的 owner。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we handle the large volume of requests from users?",
+          "2) How can we handle multi-keyword, phrase queries?",
+          "3) How can we address the large volume of writes?",
+          "4) How can we optimize storage of our system?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.fb-post-search",
+        "deliverable": "热点 query cache、phrase/shingle 索引、两阶段写入、权限过滤、存储分层、删除与 reindex runbook。",
+        "acceptance": [
+          "multi-keyword 与 phrase 查询能比较 postings intersection、position 与 shingle 的成本。",
+          "点赞高频写不会为每次变化同步重写完整文档，排序投影有批量或分层策略。",
+          "搜索缓存、CDN 和索引均不会绕过最新 visibility、block 或 deletion。"
+        ],
+        "repair": "答不出扩展时按 query QPS、post ingest、like updates、index bytes 和 permission-check QPS 建容量表，再逐项选择 batch、cache 或 shard。"
+      },
+      "concepts": [
+        {
+          "source": "hi.core.db-indexing",
+          "heading": "Inverted Indexes",
+          "why": "把关键词映射到 postings，而不是扫描 Post 表。"
+        },
+        {
+          "source": "hi.deep.elasticsearch",
+          "heading": "Mappings and Fields",
+          "why": "设计文本、时间、like 和 visibility 字段的索引语义。"
+        },
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "Add External Caching Layers",
+          "why": "吸收热门关键词和相同结果页读取。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Batching and Hierarchical Aggregation",
+          "why": "合并高频 like 变化，降低索引重写。"
+        },
+        {
+          "source": "hi.deep.elasticsearch",
+          "heading": "Pagination and Cursors",
+          "why": "对 recency/like 排序提供稳定翻页。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch4",
+          "heading": "全文检索",
+          "why": "理解分词、倒排和查询执行的核心机制。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "变更数据捕获",
+          "why": "把 Post、like 与权限变化投影到搜索索引。"
+        },
+        {
+          "source": "ddia.ch7",
+          "heading": "全局二级索引",
+          "why": "分析按词项分片的全局索引写入与读取代价。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "Post 是事实，Index 是可重建视图",
+          "body": "创建或编辑 Post 先提交权威数据库，保存 author、text、created_at、visibility、version 与删除状态，同时写 outbox/CDC 位置。indexer 幂等地生成搜索文档和 postings，记录 source_version，旧事件不能覆盖新状态。搜索结果返回 post_id 和摘要，展示前根据风险和成本做 visibility final check；详情始终回 Post 服务。索引损坏可从 checkpoint 重放或全量重建，双写失败不会永久丢帖。这个边界允许搜索为吞吐最终一致，同时不把索引当作权限和生命周期的唯一来源。抽样校验 source_version、可见性和删除状态，可以主动发现沉默的投影漂移。",
+          "takeaway": "写入事实一次，搜索投影可重复生成和校验。"
+        },
+        {
+          "title": "倒排索引把扫描变成集合运算",
+          "body": "文本经过与查询一致的 normalization、tokenization 和 analyzer，倒排表从 token 指向包含它的 doc IDs、词频和 position。单关键词读取 postings；多关键词做交集或 union；phrase 查询需要 position，或为常见短语建立 bigram/shingle，以更多存储和写放大换低延迟。结构化字段如 created_at、author、visibility class 和 like bucket 使用 filter/sort 结构，不能全部当全文。mapping 变更要版本化新索引并双读抽样，完成 backfill 后原子切 alias，避免线上原地改坏。上线前用真实语言、长短文本和高频词基准测试召回、索引大小、merge 成本与查询分位数。",
+          "takeaway": "查询能力来自具体 postings 与字段 mapping，不来自“用了搜索引擎”。"
+        },
+        {
+          "title": "排序需要为访问模式准备投影",
+          "body": "按 recency 可用 created_at + post_id 稳定排序；按 like count 若请求时从权威库 join 并排序会很慢。可以把 like_count 作为索引字段，但每个 like 都更新大文档会放大写入，因此先在流中按 post 聚合，按时间或变化阈值批量刷新搜索文档。排序值会变化，cursor 携带 sort values 和 generation，客户端仍按 post_id 去重。强时效热点可用小型 trending projection 覆盖，普通搜索接受秒级 lag。指标观察 ranking lag、refresh QPS 和结果漂移。删除和权限变化必须抢占排序刷新队列，避免低价值热度更新阻塞安全状态。",
+          "takeaway": "排序字段也是派生数据，需要批量、版本和陈旧预算。"
+        },
+        {
+          "title": "高写入通过日志、批量和两阶段索引",
+          "body": "Post 创建、编辑和 like 事件进入分区日志，indexer 按 post_id 保序并合并同一文档的短期变化。第一阶段快速写基础 searchable 文档，使新帖可发现；第二阶段补充 engagement、语言和质量字段。消费者 checkpoint 只在批量提交成功后推进，重复批次按 source_version 幂等。热点 post 的 likes 先分片计数再层级聚合，避免单 key 写瓶颈。队列积压时优先创建/删除/权限，延后 like 排序刷新，保证搜索安全与基本新鲜度。每类事件独立记录 oldest age 和失败样本，使降级选择与恢复顺序都有证据。",
+          "takeaway": "不同变更价值不同；让关键状态先索引，统计信号后收敛。"
+        },
+        {
+          "title": "权限必须在缓存和索引之外再守一层",
+          "body": "visibility 可能包含 public、friends、group、custom ACL、block 和地域规则，无法把所有用户关系展开进每份索引文档。索引先做粗粒度候选过滤，例如 public 或可访问 group IDs；结果返回前由权限服务批量 final check。热门 query cache 只能保存候选 IDs，并按 viewer scope/version 分隔，不能把 A 用户可见结果直接给 B。block、删除和权限收紧写入快速 deny store，在索引尚未刷新时立即过滤。监控 permission-denied-after-search、deny lag 和 cache scope mismatch。权限服务故障时私密候选 fail-closed，公共结果也要标记降级并限制缓存范围，不能为了延迟绕开检查。",
+          "takeaway": "搜索负责召回，权威权限过滤负责最后可见性。"
+        },
+        {
+          "title": "存储优化不能破坏删除与重建",
+          "body": "索引可只存搜索和排序所需字段，正文详情留在 Post 服务；旧 segment 压缩，删除先写 tombstone，再由 merge 回收。postings 使用压缩 doc ID 差值，常见词可按 shard 分散，冷索引迁到低成本层。优化前先量化 term vocabulary、documents、postings bytes、replica 和 refresh 成本。任何归档仍要支持隐私删除和 reindex：保留 source version、tombstone 和索引 generation，不能为了省空间删除唯一恢复依据。容量指标与删除 SLA 同时进入设计。定期演练 snapshot 加增量日志重建，测量实际恢复时间和期间新增变更是否完整追上。",
+          "takeaway": "搜索存储可以压缩和分层，但事实、版本与删除证据不能丢。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "热门关键词请求量很大，缓存搜索结果会不会泄漏私密帖子？",
+          "trigger": "候选人按 query string 全局缓存完整结果。",
+          "answer": "全局缓存只能保存不含用户权限结论的 public candidate IDs 或公共片段，并带 index generation；个性化结果必须按 viewer scope/ACL version 分隔，成本通常过高。返回前权限服务批量检查 visibility、friend/group membership、block 和快速 deny list，即使索引与缓存陈旧也不泄漏。删除和权限收紧先更新权威状态与 deny path，再异步失效索引缓存。监控 search candidate 与 final allowed 的差异、deny lag 和 cache scope。性能不足时减少候选或缓存公共 postings，而不是跳过权限。",
+          "follow_up": "权限服务故障时，public 与 private 结果分别怎样降级？",
+          "common_miss": "把搜索缓存视为最终响应，没有用户上下文和撤销路径。",
+          "repair": "画 query cache、index candidate、permission batch check、response 四步。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-post-search",
+              "heading": "1) How can we handle the large volume of requests from users?"
+            },
+            {
+              "source": "hi.pattern.scaling-reads",
+              "heading": "Add External Caching Layers"
+            }
+          ]
+        },
+        {
+          "question": "multi-keyword 与精确 phrase 查询的数据结构有什么不同？",
+          "trigger": "候选人只说对多个 postings 做 intersection。",
+          "answer": "多关键词 AND 可以按 postings 长度从小到大做交集，OR 做 union；但仅有 doc IDs 不能证明词语相邻且顺序一致。精确 phrase 需要在 postings 保存 token positions，然后在候选文档内比较位置偏移；常见短语也可建立 bigram/shingle token，以更大索引和写放大换更快查询。analyzer 必须在写和读一致处理大小写、语言与停用词。短语过长或罕见时先用最稀有词缩小候选，再做 position 验证。要说明召回、空间和 latency 的取舍。",
+          "follow_up": "中文分词和英文分词不同，索引 mapping 如何演进？",
+          "common_miss": "忽略 position，导致 phrase 退化为任意位置关键词共现。",
+          "repair": "用“new york city”手算 unigram postings、positions 和 bigram 查询。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-post-search",
+              "heading": "2) How can we handle multi-keyword, phrase queries?"
+            },
+            {
+              "source": "hi.core.db-indexing",
+              "heading": "Inverted Indexes"
+            }
+          ]
+        },
+        {
+          "question": "点赞每秒海量变化，为什么不每次都更新 Elasticsearch 文档？",
+          "trigger": "候选人把每个 like 同步写进搜索索引。",
+          "answer": "每次更新会产生 refresh、segment merge 和文档重写放大，还把搜索故障扩散到用户写路径。权威 like 事件先持久化并按 post_id 聚合，流处理器维护 count，按时间窗口或变化阈值批量刷新索引；热门榜单可另用更实时的小投影。搜索排序接受明确秒级 lag，用户自己的 like 状态从权威服务读。创建、删除和权限变更优先于 engagement 刷新。重复事件按 event_id 去重，定期从权威计数重算。监控 aggregation lag、index update QPS 和 ranking drift。",
+          "follow_up": "一个病毒式帖子形成单 key 热点，聚合如何拆分？",
+          "common_miss": "只看到最终计数，没考虑索引写放大和故障隔离。",
+          "repair": "拆出 like ingest、sharded counter、batch projection、search sort 四层。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-post-search",
+              "heading": "3) How can we address the large volume of writes?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Batching and Hierarchical Aggregation"
+            }
+          ]
+        },
+        {
+          "question": "怎样减少搜索存储而不失去可恢复性？",
+          "trigger": "候选人建议删除原文或只保留索引。",
+          "answer": "索引只保存搜索、过滤和排序需要的字段，正文与权限事实留在权威 Post 服务；postings 使用压缩 doc IDs、segment merge 和冷 tier，副本数按可用性设置。索引文档保留 source_version 与 post_id，使详情和重建可关联。删除写 tombstone 并传播到 deny path，后台 merge 才物理回收；不能提前丢掉删除证据。权威日志/CDC 保留覆盖最大重建窗口，旧快照加增量可恢复当前 generation。容量优化要同时报告 index bytes/doc、replica、merge IO、rebuild time 和 deletion SLA。",
+          "follow_up": "CDC 保留期短于全量 reindex 时间时，如何避免重建期间漏更新？",
+          "common_miss": "把索引当备份，或为了压缩删除 source version。",
+          "repair": "写出 snapshot watermark + replay tail 的重建协议。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-post-search",
+              "heading": "4) How can we optimize storage of our system?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "变更数据捕获"
+            }
+          ]
+        },
+        {
+          "question": "帖子已改为仅自己可见，但索引更新延迟一分钟，如何防止泄漏？",
+          "trigger": "候选人接受所有索引最终一致，没有安全例外。",
+          "answer": "权限收紧先在权威 Post/ACL 服务提交，并写入低延迟 deny/change-version store；搜索索引和 cache 异步更新。每次返回候选前，权限服务按 viewer 批量检查当前 visibility/version，或至少对最近权限变更命中 deny store，因此旧索引只能增加无效候选，不能直接泄漏。权限服务不可用时 private 候选 fail-closed，public 可按风险继续。完成 reindex 后清理 deny 项。监控 permission mismatch、deny store age、final-check latency 和泄漏测试，安全撤销 SLO 独立于普通 index freshness。",
+          "follow_up": "数十亿 block 边如何让 final check 保持低延迟？",
+          "common_miss": "认为缩短 refresh interval 就足够且永不失败。",
+          "repair": "分别写普通内容更新和权限收紧的传播路径与 SLO。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-post-search",
+              "heading": "Senior"
+            },
+            {
+              "source": "hi.core.caching",
+              "heading": "Cache Consistency"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "web-crawler",
+      "title": "Web Crawler",
+      "source": "hi.breakdown.web-crawler",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "API or System Interface",
+          "Data Flow",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 URL discovery、canonicalization、dedupe、host-aware frontier、fetch、parse、content storage 与 recrawl 的 Web Crawler 白板。",
+        "acceptance": [
+          "frontier 持久化且按 host/domain 调度，worker 崩溃后任务可重新领取。",
+          "robots.txt、crawl-delay、并发上限和 backoff 在调度层强制执行。",
+          "URL 与内容去重、10B 规模估算和五天完成目标有具体数据结构与吞吐计算。"
+        ],
+        "repair": "若用一个全局 queue 结束设计，补 host buckets、next_allowed_at、lease、attempt、canonical URL、content hash 和 dead-letter 状态。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we ensure we are fault tolerant and don't lose progress?",
+          "2) How can we ensure politeness and adhere to robots.txt?",
+          "3) How to scale to 10B pages and efficiently crawl them in under 5 days?",
+          "Some additional deep dives you might consider",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.web-crawler",
+        "deliverable": "lease/checkpoint 恢复、host politeness scheduler、URL/content dedupe、10B/5d 容量表、毒页面与 recrawl runbook。",
+        "acceptance": [
+          "worker 在 fetch、store 或 parse 任一点崩溃都不会永久丢 URL，重复执行安全。",
+          "robots 与 host rate limit 不依赖 worker 自觉，跨集群仍有单一调度约束。",
+          "吞吐、带宽、存储、frontier size 和失败重试能证明五天目标是否可行。"
+        ],
+        "repair": "答不出规模时用 10B/(5×86400) 算最低 page/s，再乘平均字节和失败率；答不出恢复时逐步模拟 lease 过期和重复 fetch。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Handling Failures",
+          "why": "用 durable task、lease 和 retry 保存抓取进度。"
+        },
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Handling Repeated Failures",
+          "why": "隔离毒 URL、坏解析器和永久失败域名。"
+        },
+        {
+          "source": "hi.deep.data-structures-for-big-data",
+          "heading": "Bloom Filter",
+          "why": "在权威 seen set 前减少重复 URL 查询，同时接受误判。"
+        },
+        {
+          "source": "hi.deep.kafka",
+          "heading": "Handling Retries and Errors",
+          "why": "理解日志队列的至少一次交付与失败 topic。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Handling Bursts with Queues and Load Shedding",
+          "why": "吸收某站点突然发现大量 URL 的突发写入。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch11",
+          "heading": "分布式作业编排",
+          "why": "组织大规模可恢复 fetch/parse 任务与资源分配。"
+        },
+        {
+          "source": "ddia.ch11",
+          "heading": "对象存储",
+          "why": "保存原始响应和大规模内容，而非塞入 frontier 数据库。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "故障与部分失效",
+          "why": "解释 fetch 成功、ack 丢失和 worker 暂停造成的重复。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "Frontier 是有状态调度器",
+          "body": "URL frontier 不只是 FIFO queue。每条 canonical URL 有 priority、depth、host、next_allowed_at、attempt、lease_owner 和 lease_expiry；按 host 分 bucket 后，scheduler 只释放符合 robots、crawl-delay 和并发上限的任务。worker 领取短 lease，成功提交 fetch metadata 与发现链接后 ack；崩溃则 lease 到期重新领取。优先级结合来源质量、页面变化率和业务目标，防止某个无限站点吞没资源。frontier oldest age、ready/blocked 数量、lease expiry 和 per-host QPS 是基本运营指标。调度状态必须持久化并带版本，旧 worker 或重复 timer 不能把已完成 URL 重新推回高优先队列。恢复演练还要确认分片转移后同一 host 的公平性和全局速率仍然成立。",
+          "takeaway": "frontier 同时保存进度、优先级和礼貌约束，不是无状态消息列表。"
+        },
+        {
+          "title": "规范化与去重分两层",
+          "body": "URL 进入 frontier 前先规范 scheme/host、默认端口、fragment、路径和可确认的 tracking 参数，并遵循 canonical tag；但过度规范可能合并实际不同页面，所以保留原始 URL 和规则版本。权威 seen store 用 canonical URL/hash 做条件插入，Bloom Filter 先挡掉大量明显重复查询，但 false positive 可能漏抓，关键种子或低覆盖域名应绕过并定期重建。抓取后再用内容 fingerprint 识别不同 URL 的重复页面，保存 occurrence 关系而不是删除来源。规则升级通过影子比较误合并和漏合并比例，再逐步切换并重新评估受影响 URL。",
+          "takeaway": "URL 去重节省抓取，内容去重节省存储；两者都要可审计和可修正。"
+        },
+        {
+          "title": "Politeness 必须集中执行",
+          "body": "worker 自己 sleep 无法在数千实例间保证同一 host 的全局并发。scheduler 维护 host state：robots policy/version、next_allowed_at、active leases、错误退避和 user-agent；只有拿到 host permit 才发布任务。robots.txt 按 TTL 缓存，抓取失败采用保守策略并记录决定；429/503 和 Retry-After 更新 host backoff。DNS/IP 共享、子域与重定向策略要明确，防止通过别名绕过限制。监控 robots deny、host request rate、429 和 politeness violation，并支持来源方投诉后的即时停抓。permit 的发放和归还都要幂等，lease 过期后由单一 owner 重新计算配额，避免短暂停顿造成突发请求。停抓操作必须快速传播到已排队任务和缓存策略。",
+          "takeaway": "礼貌是全局调度不变量，不能依赖分散 worker 的善意。"
+        },
+        {
+          "title": "抓取步骤按至少一次设计",
+          "body": "worker 可能下载成功后崩溃、内容保存成功但 ack 丢失，任务因此会重复。fetch 结果以 crawl_id 或 canonical_url+content_version 幂等写入，原始 body 放对象存储，metadata 条件提交；parser 以 content hash 去重，发现链接条件插入 frontier。只有所有必要提交成功才 ack lease。永久 404 与 robots deny 是终态，超时和 5xx 有上限退避，反复失败进入 dead-letter 并保留原因。恢复不追求不可能的网络 exactly once，而保证重复不会产生错误业务效果。定期对比 frontier、metadata 和对象索引，可发现 orphan body、悬空任务与长期未确认的抓取。",
+          "takeaway": "允许重复任务，用稳定 ID 和条件提交保证一次有效结果。"
+        },
+        {
+          "title": "10B/5 天先做吞吐与带宽算术",
+          "body": "最低平均吞吐约为 10B 除以 432000 秒，即两万多页每秒；再乘峰值系数、失败重试和 robots 限制，实际 fetch capacity 更高。若平均响应 100KB，入口带宽已达数 GB/s，还要估压缩原文、metadata、发现链接和索引写入。并行度由网络延迟和每 worker concurrency 推导，但 per-host politeness 限制意味着必须覆盖足够多域名。容量表应分别列 frontier DB、seen set、对象存储、parser CPU 和出口带宽，找出真正瓶颈后再扩 shard。还要把压缩率、保留期和重抓比例转成日增存储及成本，验证目标是否经济可持续。",
+          "takeaway": "规模数字连接 page/s、bytes/s、并行度和存储，而不是只证明需要很多机器。"
+        },
+        {
+          "title": "Recrawl、毒页面与质量闭环",
+          "body": "抓完一次不等于完成搜索资产。scheduler 根据历史变化率、HTTP cache headers、来源价值和抓取成本安排 recrawl；内容长期不变就降低频率，breaking source 提高。超大响应、无限日历、重定向环、压缩炸弹和解析器 bug 都会耗尽资源，因此设置 response/body/time/depth 限额，按错误指纹隔离毒页面并可回放到新 parser。质量指标包括 freshness、coverage、duplicate ratio、parse success、dead-letter 和 per-domain fairness。修复后从保存原文重跑解析，不必重新访问来源。抽样人工评估和域级覆盖报表能发现系统虽然吞吐达标、却长期只抓到低价值重复页面的问题。",
+          "takeaway": "爬虫优化的是长期覆盖与新鲜度，必须能隔离坏输入并重处理。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "worker 下载页面后崩溃，如何既不丢进度又不重复污染数据？",
+          "trigger": "候选人说消息 ack，却没有 ack 前后的故障窗口。",
+          "answer": "frontier 给任务短 lease，worker 下载后用稳定 crawl_id 或 canonical_url+content hash 幂等写对象与 metadata，parser 结果和 discovered URLs 也使用条件插入；全部提交后才 ack。若崩溃，lease 到期任务重做，但相同 ID 返回已有结果，不重复创建文档或 frontier 项。若 body 已保存而 metadata 未提交，后台 orphan scan 根据 crawl_id 修复或回收。checkpoint、lease expiry、duplicate write 和 orphan age 都要监控。可靠性来自可重试状态机，而不是希望每个网络步骤恰好执行一次。",
+          "follow_up": "对象存储写成功却长时间不可见时，metadata commit 如何处理？",
+          "common_miss": "把 queue durability 等同于跨存储原子提交。",
+          "repair": "列出 fetch、body put、metadata、discover、ack 五个崩溃点和重试结果。",
+          "sources": [
+            {
+              "source": "hi.breakdown.web-crawler",
+              "heading": "1) How can we ensure we are fault tolerant and don't lose progress?"
+            },
+            {
+              "source": "ddia.ch9",
+              "heading": "故障与部分失效"
+            }
+          ]
+        },
+        {
+          "question": "数千 worker 如何共同遵守同一网站的 robots.txt 和 crawl-delay？",
+          "trigger": "候选人在每个 worker 内 sleep。",
+          "answer": "按 host/domain 建集中或分片的 host scheduler，保存 robots policy/version、next_allowed_at、active lease count 和 backoff。worker 不直接从全局 URL 队列取任务，只消费 scheduler 已发 permit 的 host task；permit 通过条件更新保证跨实例并发上限。robots 按 TTL 缓存，刷新失败时按风险保守使用旧策略或暂停；429/Retry-After 立即延后 next_allowed_at。重定向到新 host 要重新获得许可。这样即使 worker 扩容，来源看到的总请求率仍受一个权威状态控制。",
+          "follow_up": "同一组织拥有多个子域，限制按 host 还是 registrable domain？",
+          "common_miss": "局部限速无法约束全局并发，容易无意 DDoS。",
+          "repair": "画 host bucket、permit、worker、feedback 四步，模拟两个 worker 竞争。",
+          "sources": [
+            {
+              "source": "hi.breakdown.web-crawler",
+              "heading": "2) How can we ensure politeness and adhere to robots.txt?"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Workers"
+            }
+          ]
+        },
+        {
+          "question": "10B 页面五天抓完，需要多少吞吐，哪个资源最可能先触顶？",
+          "trigger": "候选人直接说横向扩展，没有数量级。",
+          "answer": "最低平均吞吐约 10,000,000,000/432,000，约 23K pages/s；考虑峰值、失败与重试可按 2 倍预留。若平均 100KB，原始入口约 2.3GB/s，未含 TLS、重定向与发现链接；每天原文约 PB 级前应重新审视平均尺寸和保留策略。假设单 fetch 平均 500ms、每 worker 200 并发，可估实例数，但 per-host politeness 可能比机器更限制吞吐，因此需要足够域名并行。还要分别算 frontier/seen 写 QPS、parser CPU、对象存储和出口网络，依据监控确定瓶颈。",
+          "follow_up": "多数页面集中在少数大型域名时，五天目标与 politeness 冲突怎么办？",
+          "common_miss": "只计算 worker 数，不计算带宽、存储和来源速率上限。",
+          "repair": "完成 page/s、bytes/s、concurrency、frontier writes 四行容量表。",
+          "sources": [
+            {
+              "source": "hi.breakdown.web-crawler",
+              "heading": "3) How to scale to 10B pages and efficiently crawl them in under 5 days?"
+            },
+            {
+              "source": "hi.core.numbers-to-know",
+              "heading": "Applying These Numbers in System Design Interviews"
+            }
+          ]
+        },
+        {
+          "question": "Bloom Filter 误判会漏抓页面，为什么仍值得用？",
+          "trigger": "候选人把 Bloom Filter 当精确 seen set。",
+          "answer": "Bloom Filter 只能回答“可能存在”或“肯定不存在”。它适合在昂贵权威 seen-store 查询前快速放行肯定新 URL，减少远程读；命中仍可按来源价值决定查权威集合。若直接丢弃所有命中，false positive 会降低 coverage，所以高优先级 seed、低覆盖域名和审计样本应绕过，或使用可接受的小误判率并定期滚动重建。Filter 饱和、规则版本变化时创建新 generation，双查过渡。正确性仍由 canonical URL 条件插入保证，Bloom 只是成本优化。",
+          "follow_up": "如何从容量和目标 false-positive rate 估位图大小与 hash 数？",
+          "common_miss": "认为 Bloom Filter 没有 false negative 就等于不会漏抓。",
+          "repair": "写出命中/未命中各自路径，并标出权威 seen-store 的位置。",
+          "sources": [
+            {
+              "source": "hi.deep.data-structures-for-big-data",
+              "heading": "Web Crawling"
+            },
+            {
+              "source": "hi.breakdown.web-crawler",
+              "heading": "Some additional deep dives you might consider"
+            }
+          ]
+        },
+        {
+          "question": "某个站点不断生成无限日历 URL，如何防止吞没 frontier？",
+          "trigger": "候选人只依赖 URL 去重，没有 crawl trap 防护。",
+          "answer": "对每域名设置 frontier 配额、最大深度、路径模式和单位时间新 URL 增长阈值；canonicalization 去掉已知 session/tracking 参数，检测连续日期、重复路径段和低内容差异。scheduler 按域公平调度，单域爆发只占自己的 bucket，不挤压全局。疑似 trap 降低优先级并抽样抓取，内容 fingerprint 验证后可自动封禁模式，保留人工覆盖。任务仍记录发现来源和拒绝原因，便于修正规则。监控 unique growth、duplicate content、depth 与 per-domain frontier share。",
+          "follow_up": "如何避免 trap 规则误伤真正的大型归档站点？",
+          "common_miss": "无限增加队列和存储，直到系统整体背压。",
+          "repair": "为 domain bucket 写 quota、growth alarm、pattern quarantine 和人工解除流程。",
+          "sources": [
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Handling Repeated Failures"
+            },
+            {
+              "source": "hi.breakdown.web-crawler",
+              "heading": "Senior"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

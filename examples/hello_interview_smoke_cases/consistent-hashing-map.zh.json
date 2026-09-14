@@ -1,0 +1,58 @@
+{
+  "title": "Consistent Hashing",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "concept-map",
+  "summary": "一致性哈希让节点增删时只迁移少量 key，而不是全量重分布。",
+  "task": "解释如何把 cache key 或 storage key 分布到多个节点，并支持扩缩容。",
+  "constraints": [
+    "普通 `hash(key) % N` 在 N 变化时会导致大量 key 迁移",
+    "节点负载要尽量均衡，需要虚拟节点",
+    "请求路由要能快速找到 key 顺时针遇到的第一个节点"
+  ],
+  "blocks": [
+    {
+      "id": "center",
+      "kind": "component",
+      "title": "Hash ring reduces remapping",
+      "body": "Key 和节点都映射到同一个逻辑环上。节点变化时，只影响环上相邻的一小段 key，保持大部分请求路由稳定。"
+    },
+    {
+      "id": "movement",
+      "kind": "component",
+      "title": "Expansion moves nearby ranges",
+      "body": "新增节点不会让所有 key 都重新分布。它只接管自己顺时针之前的一段范围，迁移成本更可控。"
+    },
+    {
+      "id": "vnodes",
+      "kind": "component",
+      "title": "Virtual nodes smooth imbalance",
+      "body": "物理节点直接放环上可能不均匀。多个虚拟节点能打散位置，让每台机器拿到更接近的 key 范围。"
+    },
+    {
+      "id": "routing",
+      "kind": "component",
+      "title": "Lookup is deterministic",
+      "body": "请求路由时先 hash key，再顺时针找到第一个节点。只要节点视图一致，客户端和服务端会得到同一个归属。"
+    },
+    {
+      "id": "uses",
+      "kind": "component",
+      "title": "Use it for ownership, not magic scaling",
+      "body": "它适合分布式缓存、对象存储分片和 partition ownership。它解决 key 归属，不自动解决所有热点流量。"
+    },
+    {
+      "id": "caveat",
+      "kind": "caveat",
+      "title": "Hot keys still need a separate answer",
+      "body": "一致性哈希只能让 ownership 更稳定，不保证访问量均匀。真正的 hot key 还要复制、拆 key 或限流。"
+    }
+  ],
+  "callouts": [
+    {
+      "title": "扩容收益",
+      "body": "一致性哈希的核心收益是减少节点变更时的 key 迁移范围，而不是单纯把结构画成一个圆。"
+    }
+  ],
+  "talk_track": "一致性哈希我会先对比 `hash(key) % N`：节点数变化时 N 变了，几乎所有 key 都要重新映射。一致性哈希把 key 和节点都放到环上，key 归属顺时针遇到的第一个节点；新增节点只影响它附近的一段 key。为了均衡，还会给每个物理节点放多个虚拟节点。"
+}

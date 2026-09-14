@@ -1,0 +1,64 @@
+{
+  "title": "Vector Database Retrieval",
+  "language": "English",
+  "style": "excalidraw-plus",
+  "layout": "concept-map",
+  "summary": "Vector search is a recall pipeline that still needs filtering, ranking, and operational guardrails.",
+  "task": "Explain when a vector database helps and what production tradeoffs matter.",
+  "constraints": [
+    "Embeddings are approximate semantic representations, not exact truth",
+    "ANN indexes trade recall, latency, memory, and rebuild cost",
+    "Many products need metadata filters and permission checks before results are shown"
+  ],
+  "qa": {
+    "chapter_category": "advanced-topic",
+    "content_size": "medium",
+    "source_kind": "Hello Interview advanced topic chapter",
+    "expected_layout": "concept-map"
+  },
+  "blocks": [
+    {
+      "id": "embedding",
+      "kind": "service",
+      "title": "Embedding model defines meaning",
+      "body": "Documents and queries are converted into vectors by the same embedding model. Model choice determines what semantic similarity actually means for the product."
+    },
+    {
+      "id": "ann",
+      "kind": "database",
+      "title": "ANN index narrows candidates",
+      "body": "The vector index finds approximate nearest neighbors quickly. Parameters tune latency versus recall, so exact correctness is not the default behavior."
+    },
+    {
+      "id": "filter",
+      "kind": "service",
+      "title": "Metadata filters protect semantics",
+      "body": "Tenant id, language, document type, freshness, and permissions often filter candidates before or after vector lookup. The filter strategy affects both latency and correctness."
+    },
+    {
+      "id": "rerank",
+      "kind": "service",
+      "title": "Reranking improves precision",
+      "body": "A second-stage ranker can score the top candidates using richer context. This is slower, but usually improves answer quality more than increasing raw top-k."
+    },
+    {
+      "id": "ops",
+      "kind": "warning",
+      "title": "Operations are part of the design",
+      "body": "Embedding backfills, index rebuilds, stale vectors, and offline evaluation all matter. Without measurement, vector search can feel impressive while quietly returning poor results."
+    }
+  ],
+  "connectors": [
+    {"from": "embedding", "to": "ann", "label": "vectorize"},
+    {"from": "ann", "to": "filter", "label": "top-k set"},
+    {"from": "filter", "to": "rerank", "label": "eligible docs"},
+    {"from": "rerank", "to": "ops", "label": "measure quality"}
+  ],
+  "callouts": [
+    {
+      "title": "Interview-ready caveat",
+      "body": "A vector DB is not a magic database replacement; it is one retrieval stage in a measured ranking pipeline."
+    }
+  ],
+  "talk_track": "I would frame vector databases as a retrieval tool, not a source of truth. The important design is the pipeline: create embeddings, use an ANN index to get candidates, apply metadata and permission filters, then often rerank the top results. The senior caveat is that approximate search needs evaluation and operations work, including backfills, index rebuilds, stale embeddings, and recall or precision measurement."
+}

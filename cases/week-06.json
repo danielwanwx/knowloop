@@ -1,0 +1,652 @@
+{
+  "week": 6,
+  "theme": "高争用交易、租约与资金正确性",
+  "audio_preview": {
+    "title": "第 6 周导览：把不可逆承诺放在最小边界",
+    "script": "Ticketmaster、Online Auction 和 Payment System 都有高并发写入，但正确性承诺不同。票务不能把同一座位卖两次，拍卖不能在截止后接受出价且必须选出唯一赢家，支付不能重复扣款并要留下平衡、可审计的账本。通读日先为每题写状态机：座位从可售到保留再到已售；拍卖从开放到关闭，出价按单调序列推进；支付意图经过处理中到最终状态，外部网络超时只代表结果未知。然后把条件写、版本、幂等键和对账放到具体提交点，不要笼统说“强一致数据库”。深挖日会遇到热门开售、单场拍卖热键、重复支付回调和 webhook 乱序。你需要缩小强协调域：只锁一个 seat、一个 auction 或一个 payment intent，其余搜索、座位图、实时推送和通知都可以异步派生。故障恢复必须覆盖租约过期后的旧持有者、外部成功但本地响应丢失、死信重放与事实对账。mock 的评分重点不是组件数量，而是是否给出诚实状态、是否阻止重复副作用、是否能证明恢复后没有静默差异。完成本周后，你应能用业务不变量决定事务边界，用等待室、背压和队列保护热点，并用超卖数、截止后出价、重复扣款和账本不平衡这些直接指标守住系统。使用时先暂停音频，凭记忆画出事实状态、提交点和故障分支，再继续核对。每天结束前必须留下可复查的图、容量计算和一条 repair 记录；如果答案只能说出组件名，就回到原文对应标题，把请求时序与用户可见结果补全。周末的综合 mock 不追求背诵固定架构，而要在约束变化后仍能守住不变量、说明取舍，并用指标决定降级、扩展和回滚。"
+  },
+  "projects": [
+    {
+      "slug": "ticketmaster",
+      "title": "Ticketmaster",
+      "source": "hi.breakdown.ticketmaster",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Ticketmaster 端到端设计图：标出 座位可售、保留、已售与过期租约、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 用户选择座位后如何保留、支付并最终出票 与 千万并发查看活动、搜索与座位可用性，每条箭头标明协议或数据。",
+          "明确 带 seatVersion 的条件写从 AVAILABLE 变为 HELD，支付确认后再从同一 hold 变为 SOLD，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 座位可售、保留、已售与过期租约，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we improve the booking experience by reserving tickets?",
+          "2) How is the view API going to scale to support 10s of millions of concurrent requests during popular events?",
+          "3) How will the system ensure a good user experience during high-demand events with millions simultaneously booking tickets?",
+          "4) How can you improve search to ensure we meet our low latency requirements?",
+          "5) How can you speed up frequently repeated search queries and reduce load on our search infrastructure?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.ticketmaster",
+        "deliverable": "提交 Ticketmaster 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 5 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Optimistic Concurrency Control",
+          "why": "用 seatVersion 阻止双重保留。"
+        },
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "Add External Caching Layers",
+          "why": "保护热门活动浏览与座位图。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Indexing for Access Patterns",
+          "why": "区分库存事实与搜索视图。"
+        },
+        {
+          "source": "hi.deep.elasticsearch",
+          "heading": "Pagination and Cursors",
+          "why": "为活动搜索设计稳定低延迟翻页。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch8",
+          "heading": "可串行化",
+          "why": "解释单座位条件更新的正确性。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "分布式锁和租约",
+          "why": "设计带 fencing 的 hold 过期。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "处理支付回调与出票重试。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "活动目录、搜索结果与票务库存不是同一种真相",
+          "body": "Ticketmaster 的活动名称、场馆、演出时间适合由目录数据库保存，并异步投影到搜索索引；某场次某座位是否还能卖，则必须由库存事实表裁决。座位图缓存可以把 AVAILABLE、HELD、SOLD 渲染得很快，却只是一张带 inventoryVersion 的快照，不能凭缓存命中直接承诺购票。高层设计应让浏览请求走缓存或索引，让最终确认回到 eventId 与 seatId 定位的权威库存。这样即使索引延迟、缓存失效或搜索集群降级，用户可能短暂看到旧颜色，但两个订单不会同时拥有同一座位，也能明确说明哪些页面可降级为仅浏览。",
+          "takeaway": "目录负责发现活动，缓存负责快速展示，库存条件写才有资格承诺座位。"
+        },
+        {
+          "title": "用带版本的临时保留把抢票竞争变成一次条件转换",
+          "body": "选择座位时创建 holdId，并在单个原子操作中验证座位仍为 AVAILABLE、seatVersion 等于客户端读到的版本，再写成 HELD、记录 ownerId、expiresAt 与新版本。重复请求携带同一 idempotencyKey，只返回原 hold；竞争者得到明确的已被占用，而不是在应用层先查再改。保留期限由服务端决定，清理任务只能对 holdId 与版本仍匹配的记录执行 HELD 到 AVAILABLE 的条件转换。支付完成同样要求当前 hold 归属正确且未被更高世代替代，随后变为 SOLD。这个模型把锁定范围压到单座位，也使超时后的查询和安全重试有确定依据。",
+          "takeaway": "保留、释放与售出都验证 holdId 和 seatVersion，扫描器只负责触发而不越权。"
+        },
+        {
+          "title": "支付确认与保留过期相撞时先承认结果未知",
+          "body": "付款请求离开本系统后，网络超时既不能证明扣款失败，也不能证明扣款成功。PaymentAttempt 要保存 providerRequestId 与本地 holdId；回调、主动查询和客户端重试最终都汇入同一状态机。若支付成功事件到达时座位仍由该 hold 持有，事务内把座位改为 SOLD，并写出票 outbox；若保留已被合法释放或转售，则进入人工可解释的退款或替代席位流程，绝不能悄悄覆盖新持有人。过期清理与支付确认同时发生时，双方都以条件写竞争同一版本，只有一个提交。接口返回 PROCESSING 并提供查询地址，比把超时谎报为失败更符合财务事实。",
+          "takeaway": "用统一 PaymentAttempt 和库存版本化解过期竞态，对未知结果提供查询而非盲目重扣。"
+        },
+        {
+          "title": "等待室控制准入速率而不是伪造无限库存吞吐",
+          "body": "热门开售的危险不是总日活，而是数百万人在同一分钟刷新同一 eventId。入口先发不可篡改的排队凭证，其中包含 eventId、随机化后的顺序、issuedAt、admissionWindow 与签名；等待室只按库存服务可持续的条件写吞吐发放短期 admission token。token 绑定用户和场次并限制并发请求，刷新页面不能插队，多设备也不能复制资格。库存变慢时收紧放行速率，队列页仍可用静态资源和轻量轮询展示估计等待时间。公平性需要监测顺序跳跃、凭证重放和等待分位数，并公开“获得入场资格不等于保证有票”的产品语义。",
+          "takeaway": "等待室的容量单位是后端可承受的尝试速率，公平由签名顺序凭证和可审计放行保证。"
+        },
+        {
+          "title": "搜索游标与热门查询缓存不能泄漏成售票承诺",
+          "body": "活动搜索按城市、日期、类别和热度建立倒排索引，深翻页使用包含排序值与 eventId 的 search_after 游标，避免 offset 在索引变化时既昂贵又重复。查询缓存的键应覆盖规范化过滤条件、地区、语言和索引版本，设置短时有效期，并用请求合并防止热门键同时过期造成击穿。活动取消或时间变更通过变更事件刷新索引和失效相关缓存；若更新尚未收敛，详情页仍回源目录复核。座位可用数量可以作为近实时提示，但结算前始终重新读取库存，因此扩大搜索副本和缓存不会复制出售权，也不会让陈旧索引决定成交。",
+          "takeaway": "稳定游标服务发现，缓存保护检索；进入预订时重新校验目录与库存事实。"
+        },
+        {
+          "title": "抢票演练要同时观察超卖、公平和恢复水位",
+          "body": "容量测试以单场开售峰值建模：估算每个候选用户的排队轮询、座位图读取、保留条件写和支付回调放大倍数，再为单 eventId 预留节点故障后的吞吐余量。关键指标包括有效 hold 冲突数、SOLD 唯一约束违规、hold 创建成功率、过期释放滞后、等待室放行与完成率、支付成功到出票的 p99，以及目录、索引、座位图之间的版本差。演练依次注入缓存击穿、库存主节点切换、支付回调重复和清理任务延迟；恢复后用 seatId 对账订单、有效 hold 与库存状态。任何超卖必须立即阻断发布，而不是用平均延迟正常来掩盖正确性事故。",
+          "takeaway": "验收以零超卖和可解释排队为先，再用版本水位与尾延迟证明系统已恢复。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "两个用户在同一毫秒选择同一个座位，你如何实现保留而不依赖一个容易失效的全局锁？",
+          "trigger": "候选人提出先读取 AVAILABLE 再更新，或只说给座位加锁却没有租约与失效语义时追问。",
+          "answer": "我会让客户端提交 eventId、seatId、读到的 seatVersion 和稳定 idempotencyKey。库存库执行单行条件更新：只有状态为 AVAILABLE 且版本匹配时，才能写入新的 holdId、ownerId、expiresAt 与递增版本；返回受影响行数就是竞争结果。相同幂等键重试时先查询原 hold 并返回同一过期时间，不重新延长期限。释放任务也必须匹配 holdId、状态和版本，因此迟到扫描器不能释放后来用户的保留。支付转 SOLD 再验证同一 hold 所有权。这样强协调只覆盖一张座位记录，避免全场锁，同时把重复、超时与清理竞态都落到可验证的条件表达式上。",
+          "follow_up": "条件更新已经成功但响应丢了，第二次请求怎样避免创建一个更晚过期的新 hold？",
+          "common_miss": "只说 Redis 锁或数据库事务，没有给出前置条件、版本字段和迟到释放的 fencing。",
+          "repair": "写出 AVAILABLE→HELD、HELD→AVAILABLE、HELD→SOLD 三条完整条件语句并走一遍重复请求。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ticketmaster",
+              "heading": "1) How do we improve the booking experience by reserving tickets?"
+            },
+            {
+              "source": "hi.pattern.dealing-with-contention",
+              "heading": "Optimistic Concurrency Control"
+            }
+          ]
+        },
+        {
+          "question": "一场演唱会开售时有三百万用户同时进入，你怎样设计等待室并证明它没有暗中偏袒刷新更快的人？",
+          "trigger": "候选人只提出限流或扩容，没有说明入场顺序、资格防伪、重放和公平指标时追问。",
+          "answer": "开售前先为合格会话签发排队凭证，凭证绑定 eventId、userId、随机化顺序号和签名；刷新只读取原顺序，不能生成更靠前的位置。等待室根据库存条件写、支付依赖和数据库饱和度的实时预算，以固定窗口发放短期 admission token，token 一次使用并限制每用户并发。后端变慢就降低放行率，而不是让所有请求穿透后再失败。公平性通过顺序反转率、相同顺序段的等待分布、凭证重放拒绝数和特殊通道占比审计。灾难恢复时从持久顺序水位续发，不能重新洗牌；同时向用户明确入场只是获得尝试机会，并不保证库存。",
+          "follow_up": "等待室区域整体故障并恢复后，如何保持原顺序又避免旧 token 被重复消费？",
+          "common_miss": "把等待室当成静态页面，没有定义其顺序事实、准入控制和与库存容量的反馈回路。",
+          "repair": "补出排队凭证字段、放行算法、持久水位以及四个公平性验收指标。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ticketmaster",
+              "heading": "3) How will the system ensure a good user experience during high-demand events with millions simultaneously booking tickets?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Handling Bursts with Queues and Load Shedding"
+            }
+          ]
+        },
+        {
+          "question": "座位图查看接口达到千万并发时，你会缓存什么；用户点到一张已售座位是否意味着设计失败？",
+          "trigger": "候选人声称缓存能强一致展示每个座位，或为了绝不陈旧而让所有浏览流量打到库存主库时追问。",
+          "answer": "我会把活动静态信息放到边缘缓存，把按 section 生成的座位图快照放应用缓存，并在响应中携带 inventoryVersion 和生成时间；热门快照用请求合并更新，防止同时过期。浏览允许数秒陈旧，因此用户偶尔点到刚售出的座位是可接受的发现阶段冲突，但保留接口必须回权威库存做 seatVersion 条件写，并给出明确的已被占用结果。客户端收到冲突后只增量刷新相关 section，而不是重拉整场。缓存失效时可返回较旧快照并标注刷新中，库存主库仍被隔离。验收分别看浏览 p99、快照年龄、回源率和保留冲突率，不能用缓存命中率替代零超卖。",
+          "follow_up": "某个热门 section 缓存同时失效，你怎样阻止数万请求一起重建？",
+          "common_miss": "把可用性展示和最终出售混成一个一致性目标，导致要么超卖，要么读路径无法扩展。",
+          "repair": "标出座位图快照的新鲜度预算，并画出点击后回库存条件校验与局部刷新的时序。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ticketmaster",
+              "heading": "2) How is the view API going to scale to support 10s of millions of concurrent requests during popular events?"
+            },
+            {
+              "source": "hi.pattern.scaling-reads",
+              "heading": "\"What happens when multiple requests try to rebuild an expired cache entry simultaneously?\""
+            }
+          ]
+        },
+        {
+          "question": "活动搜索不断有新增和改期时，如何让深翻页稳定、热门查询够快，又不把旧结果当成可售事实？",
+          "trigger": "候选人使用大 offset 分页，或缓存整个搜索结果却没有版本、失效与详情复核策略时追问。",
+          "answer": "索引文档保存 eventId、地点、开始时间、类别和确定性的并列排序键；下一页游标编码最后一条的排序值、eventId 与查询快照版本，使用 search_after 避免深 offset 的扫描和页面漂移。缓存键包含规范化查询、地区、语言和索引版本，短 TTL 配合 single-flight 重建；取消或改期事件更新索引后递增版本，让新请求不再命中旧键。旧游标若超过保留窗口就返回可重新开始的明确错误。搜索结果只负责发现，打开详情时回目录确认活动状态，真正保留再回库存条件写。这样允许检索短暂最终一致，却不会让搜索副本拥有任何票务承诺。",
+          "follow_up": "索引滚动更新期间，旧游标指向的快照被回收，你给客户端什么行为契约？",
+          "common_miss": "只说 Elasticsearch 和 Redis，没有稳定排序、游标快照、失效触发及事实复核边界。",
+          "repair": "定义游标载荷与过期响应，再用活动改期发生在两页之间的例子验证无静默重复。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ticketmaster",
+              "heading": "4) How can you improve search to ensure we meet our low latency requirements?"
+            },
+            {
+              "source": "hi.breakdown.ticketmaster",
+              "heading": "5) How can you speed up frequently repeated search queries and reduce load on our search infrastructure?"
+            },
+            {
+              "source": "hi.deep.elasticsearch",
+              "heading": "Pagination and Cursors"
+            }
+          ]
+        },
+        {
+          "question": "支付方已经扣款，但回调在 hold 过期后才到；你会出票、退款还是重新抢占座位？",
+          "trigger": "候选人把支付超时直接视为失败，或让迟到回调无条件把座位改为 SOLD 时追问。",
+          "answer": "首先不允许重新抢占：迟到回调必须携带 providerRequestId，映射到原 PaymentAttempt 和 holdId，并用幂等事件号进入状态机。若库存条件写能证明该 hold 仍有效，就原子转 SOLD 并写出票 outbox；若座位已被合法释放但尚未售出，产品可以在明确策略下尝试一次受约束恢复；若已属于别人，则把本次付款标为 PAID_BUT_UNFULFILLED，自动发起幂等退款并进入对账队列。所有分支保留原始支付证据和人工可解释原因。接口在外部结果未知期间返回 PROCESSING，后台主动查询支付方，绝不通过再次扣款探测状态。最终以支付方流水、PaymentAttempt、订单和座位四方对账收敛。",
+          "follow_up": "退款请求也超时且结果未知时，怎样避免重复退款并向用户展示诚实状态？",
+          "common_miss": "为了守库存就丢弃已扣款事实，或为了守付款就覆盖已售给其他人的座位。",
+          "repair": "增加 PAID_BUT_UNFULFILLED 与 REFUND_PENDING 状态，并演练回调重复和退款查询。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ticketmaster",
+              "heading": "1) How do we improve the booking experience by reserving tickets?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "幂等性"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "online-auction",
+      "title": "Online Auction",
+      "source": "hi.breakdown.online-auction",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Online Auction 端到端设计图：标出 拍卖规则、出价日志、当前最高价与结束结果、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 新出价如何校验高于当前价并按唯一顺序接受 与 实时查看最高价并在结束时得到不可争议赢家，每条箭头标明协议或数据。",
+          "明确 单个 auctionId 的条件事务追加 bid 并更新 currentPrice/version，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 拍卖规则、出价日志、当前最高价与结束结果，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we ensure strong consistency for bids?",
+          "2) How can we ensure that the system is fault tolerant and durable?",
+          "3) How can we ensure that the system displays the current highest bid in real-time?",
+          "4) How can we ensure that the system scales to support 10M concurrent auctions?",
+          "Some additional deep dives you might consider",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.online-auction",
+        "deliverable": "提交 Online Auction 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 4 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Optimistic Concurrency Control",
+          "why": "保证出价与关闭的条件顺序。"
+        },
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "Websockets: The Full-Duplex Champion",
+          "why": "推送最高价并支持断线补差。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Entities, Keys & Relationships",
+          "why": "区分不可变 Bid 与 Auction 聚合。"
+        },
+        {
+          "source": "hi.deep.redis",
+          "heading": "Redis for Pub/Sub",
+          "why": "推送最高价，同时明确持久出价日志才是事实。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch10",
+          "heading": "线性一致性",
+          "why": "定义单拍卖出价的观察顺序。"
+        },
+        {
+          "source": "ddia.ch8",
+          "heading": "可串行化",
+          "why": "保证竞价与关闭互斥。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "不可靠的时钟",
+          "why": "处理截止时间边界。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "Auction 聚合保存当前裁决，Bid 日志保存每次证据",
+          "body": "在线拍卖把 Auction 视为单个竞争域：记录 auctionId、sellerId、状态、serverDeadline、currentPrice、winnerId、version 与 lastBidSeq；每次被接受或拒绝的出价另写不可变 Bid 记录，包含 bidderId、amount、requestId、receivedAt 和裁决原因。Auction 行回答“此刻谁领先”，Bid 日志回答“系统为何得出这个结论”，两者在一次事务里推进。浏览缓存和推送消息只是从已提交 bidSeq 派生，不得反向改价。这个模型既避免每次展示扫描所有出价，又让争议复盘、故障重放和关闭后审计都有完整证据，而不是只剩一个无法解释的最高价数字。",
+          "takeaway": "聚合行承担串行裁决，不可变出价日志承担审计与恢复，两者共享 bidSeq。"
+        },
+        {
+          "title": "接受出价必须把金额、状态、期限和版本放进同一原子判定",
+          "body": "提交 Bid 时先用 requestId 去重，再由 Auction 所在分片执行条件事务：状态必须为 OPEN，服务端接收时刻未超过 deadline，amount 满足最小加价规则，version 等于读取值；成功后同时递增 version 与 bidSeq、更新最高价和领先者、插入 Bid 与 outbox。两个并发出价只能有一个基于旧版本成功，失败者重新读取后决定是否仍满足规则。不能把“校验当前价”和“写新价格”拆到两个服务，也不能让 Redis 自增值成为唯一事实。对单个热门 auction 的协调是业务必需，但它不应阻塞其他 auctionId 的出价。",
+          "takeaway": "把 OPEN、截止时间、加价规则与 version 合成一次条件提交，冲突后重读而非覆盖。"
+        },
+        {
+          "title": "拍卖截止由服务器裁决点定义，而不是相信客户端倒计时",
+          "body": "客户端显示的倒计时只是体验信息，真正有效性由接收出价的权威 Auction owner 根据 serverDeadline 判断。请求在截止前离开客户端却在截止后到达，默认按服务器收到时间拒绝；若产品支持反狙击延时，则“最后若干秒的有效出价延长截止”也必须与该出价在同一事务内更新 deadline 和 version。关闭任务携带预期版本，只能把仍为 OPEN 且 deadline 已过的聚合改为 CLOSED；与边界出价竞争时，两者只有一个先提交，另一方重读新状态。所有响应返回 serverNow、最终 deadline 与 bidSeq，让客户端修正展示并能解释边界判定。",
+          "takeaway": "用服务器接收时刻和版本化关闭解决边界竞争，产品若延时必须写成明确原子规则。"
+        },
+        {
+          "title": "分片所有权世代防止故障切换后出现两个拍卖裁判",
+          "body": "Auction 按 auctionId 分区，每个分区在某一 ownerEpoch 只有一个可接受写入的 leader；路由目录可以缓存位置，但每次提交都带世代并由存储拒绝旧 owner。事务日志至少跨故障域复制后才确认，Bid 与 outbox 同事务落盘，推送消费者可重复读取但按 auctionId、bidSeq 去重。leader 在确认后崩溃时，新 owner 从已提交日志恢复 currentPrice 与 lastBidSeq；若客户端没收到响应，则用 requestId 查询原裁决，而不是再生成一笔出价。定期从 Bid 日志重算聚合并比较哈希，可以发现静默丢失或错误程序写坏当前价。",
+          "takeaway": "写确认绑定复制提交和 ownerEpoch，切主后按 requestId 查询与日志重算恢复。"
+        },
+        {
+          "title": "实时最高价推送携带 bidSeq，断线后先补洞再接直播",
+          "body": "提交事务产生 BidAccepted 事件，实时服务按 auctionId 订阅并向已连接观察者推送 currentPrice、winnerMask、bidSeq 与 deadline。连接落在哪台网关由一致性路由管理，但网关不保存权威最高价。客户端只接受比 lastSeenBidSeq 更大的事件；发现跳号或重连时，先调用 catch-up API 读取从 lastSeenBidSeq 之后的已提交变化，若保留窗口已过则取当前 Auction 快照，再继续订阅。慢客户端限制发送缓冲，超过预算就断开并要求补读，不能让一个浏览器拖垮整个房间。重复事件可忽略，顺序恢复以持久序列为准。",
+          "takeaway": "WebSocket 只负责低延迟通知，bidSeq 与补读接口才保证重连后的连续视图。"
+        },
+        {
+          "title": "千万场普通拍卖可分片，单场超级热点要用排队和明确背压",
+          "body": "十百万并发拍卖大多能按 auctionId 均匀分片，但明星藏品可能把所有写压到一个不可再拆的串行聚合。先把浏览流量交给缓存与实时扇出层，把不同拍卖隔离到独立分区；对热点出价入口设置有界队列、每用户速率限制和基于 serverReceivedAt 的确定顺序，队列接近截止却无法在延迟预算内裁决时必须拒绝，而不是接受后丢失。可批量持久化日志和合并推送，但不能批量挑选“本批最高价”而跳过业务逐项裁决。容量验收观察单 auction 队列年龄、版本冲突、裁决 p99、拒绝原因和推送水位差。",
+          "takeaway": "横向分片解决拍卖数量，单拍卖热点靠有界排队与背压，不能放松确定顺序。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "两个更高出价同时到达时，怎样保证最高价、领先者和出价历史不会彼此矛盾？",
+          "trigger": "候选人先读最高价再普通更新，或把消息到达顺序误当成数据库提交顺序时追问。",
+          "answer": "我会把单个 auctionId 作为最小串行化域，在一次事务里验证 Auction 为 OPEN、金额满足当前最小加价、version 匹配，然后递增 version 和 bidSeq、更新 currentPrice 与 winnerId、插入不可变 Bid 记录及 outbox。两个请求从同一版本出发只允许一个条件更新成功；另一个重新读取新价格后，要么仍合格并再次竞争，要么收到明确的 bid-too-low。requestId 唯一约束让超时重试返回原裁决。Redis 和 WebSocket 可以镜像结果，却不参与最终判定。由此任何最高价都对应一条同事务 Bid 证据，日志重放也能得到相同聚合。",
+          "follow_up": "较高金额请求先到应用层却后提交，你是否保证金额最大者获胜，还是保证按什么顺序裁决？",
+          "common_miss": "只说乐观锁，没有说明失败重试后业务条件可能改变，也没有让 Bid 日志与聚合原子一致。",
+          "repair": "写出条件事务字段，并用 100 元与 110 元交错提交的时序验证返回值。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-auction",
+              "heading": "1) How can we ensure strong consistency for bids?"
+            },
+            {
+              "source": "hi.pattern.dealing-with-contention",
+              "heading": "Optimistic Concurrency Control"
+            }
+          ]
+        },
+        {
+          "question": "出价在用户屏幕倒计时归零前发出，却在服务器截止后到达，你接受吗；关闭任务又如何避免抢跑？",
+          "trigger": "候选人相信客户端时间，或让定时任务无条件关闭而没有与最后一笔出价竞争时追问。",
+          "answer": "默认契约以权威服务收到请求的时刻为准，客户端倒计时只作提示；响应携带 serverNow 和 deadline 便于校时。接受事务同时检查 OPEN、serverReceivedAt 不晚于 deadline、version 与加价规则。关闭任务带预期 version，只能条件更新仍为 OPEN 且截止已过的聚合，因此它与边界出价最多一个先提交；失败方重读后按新状态结束。若产品采用反狙击规则，最后窗口内的有效出价必须在同一事务中延长 deadline，让关闭任务看到新版本。不能事后凭客户端时间戳插入旧序列，否则恶意客户端和网络抖动都会破坏公平。",
+          "follow_up": "权威服务切主造成时钟偏移时，你如何设置误差预算并审计边界裁决？",
+          "common_miss": "把 NTP 同步当成绝对正确，未定义业务采用的时间点及定时关闭的条件写。",
+          "repair": "明确 serverReceivedAt 契约，再画边界出价、延时规则和关闭任务三方竞争时序。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-auction",
+              "heading": "2) Users should be able to bid on an item. Where bids are accepted if they are higher than the current highest bid."
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "你用的是谁的时钟？"
+            }
+          ]
+        },
+        {
+          "question": "主节点确认一笔领先出价后立刻宕机，新节点如何证明不会退回旧最高价或重复记账？",
+          "trigger": "候选人只说多副本高可用，没有说明确认点、旧主隔离、客户端结果未知和审计时追问。",
+          "answer": "成功响应只能在 Auction 更新、Bid 记录和 outbox 已作为同一事务进入复制提交点后发出。新 owner 获得更高 ownerEpoch，从已提交日志恢复 lastBidSeq 与 currentPrice；存储拒绝旧世代继续写，避免网络分区产生两个裁判。若客户端没收到响应，它用原 requestId 查询，唯一约束返回已经接受或拒绝的裁决，不新建 Bid。推送消费者从持久 offset 重放并按 auctionId、bidSeq 去重。恢复后后台从不可变 Bid 日志重算最高价、领先者和序列，与 Auction 聚合做哈希对账；差异触发隔离而非自动覆盖证据。",
+          "follow_up": "如果跨故障域复制延迟过高，你愿意降低哪项体验，不能降低哪项保证？",
+          "common_miss": "声称副本数量等于耐久性，却不定义写确认条件和旧 leader 的 fencing。",
+          "repair": "补出 ownerEpoch、复制确认点、requestId 查询协议和日志重算验收。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-auction",
+              "heading": "2) How can we ensure that the system is fault tolerant and durable?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "基于日志的消息代理"
+            }
+          ]
+        },
+        {
+          "question": "观察者断网十秒后重连，怎样确认看到的是完整且按序的最高价变化，而非仅仅最新一条推送？",
+          "trigger": "候选人把 WebSocket 当作可靠消息队列，未处理丢包、重复、跳号和慢消费者时追问。",
+          "answer": "每个已提交变化携带 auctionId 与单调 bidSeq，客户端持久记录 lastSeenBidSeq。重连时先调用补读接口请求该序列之后的事件；若服务端仍保留窗口就顺序返回缺口，窗口已回收则返回当前 Auction 快照和 snapshotBidSeq，客户端以它重置基线后再订阅。实时网关可以重复发送，客户端按序列去重；看到跳号时暂停应用后续事件并补洞。网关发送缓冲有上限，慢消费者被断开而不是拖住房间。最终顺序来自 Auction 的持久提交序列，不来自不同网关的网络到达时间，因此切换网关也能收敛。",
+          "follow_up": "补读响应与新 WebSocket 事件同时到达时，客户端如何封住两者之间的竞态窗口？",
+          "common_miss": "只设计心跳重连，没有序列水位、补读窗口和快照回退协议。",
+          "repair": "定义 lastSeenBidSeq 状态机，并演练补读期间又产生两笔新出价的交错。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-auction",
+              "heading": "3) How can we ensure that the system displays the current highest bid in real-time?"
+            },
+            {
+              "source": "hi.pattern.realtime-updates",
+              "heading": "\"How do you handle connection failures and reconnection?\""
+            }
+          ]
+        },
+        {
+          "question": "系统可按 auctionId 支撑一千万场拍卖，但单场顶级拍卖每秒十万次出价时怎么办？",
+          "trigger": "候选人用普通一致性哈希回答所有扩展问题，忽略单个键不能随意多主写时追问。",
+          "answer": "普通拍卖按 auctionId 横向分片，浏览和推送从写裁决器剥离；超级热点仍由一个逻辑 Auction owner 维护确定序列，因为把同一聚合多主拆开会失去强一致。入口对每用户限速并进入有界队列，以 serverReceivedAt 和稳定请求号排序；队列年龄超过截止与裁决预算时明确拒绝，让用户知道未被接受。底层可批量追加 Bid 日志、合并相邻推送并扩展只读副本，但每笔出价仍逐项验证当时价格与版本。若业务允许，可提高最小加价或设置资格门槛来减少无效竞争，这是产品取舍而非偷偷丢请求。验收盯单键队列年龄、拒绝率和裁决 p99。",
+          "follow_up": "批量写入一组出价时，如何保留每笔请求面对前一笔结果的业务语义？",
+          "common_miss": "建议随机分散同一 auction 的写入，却没有重新合并出一个唯一可解释的顺序。",
+          "repair": "给热点拍卖写有界队列协议，并解释哪些步骤能批处理、哪些裁决不能合并。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-auction",
+              "heading": "4) How can we ensure that the system scales to support 10M concurrent auctions?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "\"What happens when you have a hot key that's too popular for even a single shard?\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "payment-system",
+      "title": "Payment System",
+      "source": "hi.breakdown.payment-system",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Payment System 端到端设计图：标出 支付意图、处理尝试、账本条目与外部网络状态、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 商户发起支付后如何安全调用外部网络并更新状态 与 商户查询状态并通过 webhook 获得可验证更新，每条箭头标明协议或数据。",
+          "明确 本地记录 payment intent 与幂等键后开始外部调用，最终状态由可对账事件条件推进，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 支付意图、处理尝试、账本条目与外部网络状态，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) The system should be highly secure",
+          "2) The system should guarantee durability and auditability with no transaction data ever being lost, even in case of failures.",
+          "3) The system should guarantee transaction safety and financial integrity despite the inherently asynchronous nature of external payment networks",
+          "4) The system should be scalable to handle high transaction volume (10,000+ TPS)",
+          "Bonus Deep Dives",
+          "1) How can we expand the design to support Webhooks?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.payment-system",
+        "deliverable": "提交 Payment System 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 的 4 个非功能目标与 Bonus Deep Dives 的 Webhooks 追问，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.core.api-design",
+          "heading": "HTTP Methods",
+          "why": "设计幂等创建、查询与状态接口。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Handling Bursts with Queues and Load Shedding",
+          "why": "隔离外部调用和 webhook 投递。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Entities, Keys & Relationships",
+          "why": "区分 intent、attempt、ledger 与 event。"
+        },
+        {
+          "source": "hi.deep.postgres",
+          "heading": "Transactions",
+          "why": "保护 PaymentIntent、账本与 outbox 的本地事务边界。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch13",
+          "heading": "为可审计性而设计",
+          "why": "建立可追溯支付与账本证据。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "处理请求与回调重试。"
+        },
+        {
+          "source": "ddia.ch8",
+          "heading": "ACID 的含义",
+          "why": "保护本地账本不变量。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "PaymentIntent 与 PaymentAttempt 分开表达用户意图和每次通道尝试",
+          "body": "商户创建 PaymentIntent 时提供 merchantId、orderId、amount、currency 和 idempotencyKey；唯一约束保证同一业务订单不会因重试生成第二笔付款。Intent 保存总体状态，Attempt 则记录每次向收单方发出的 providerRequestId、通道、当前阶段和最后证据。接口不会把一次网络超时压成 FAILED，而是返回 PROCESSING 与可查询的 paymentId。状态迁移只允许从 CREATED 到 PROCESSING，再依据有证据的授权、捕获或失败结果推进；晚到事件携带版本，不能把已退款的付款倒退成成功。分层状态让路由重试、换通道和用户查询都保持同一笔业务意图。",
+          "takeaway": "Intent 保持商户级唯一语义，Attempt 保存外部交互证据，未知结果必须显式存在。"
+        },
+        {
+          "title": "外部网络超时后的核心动作是查询和对账，不是再次扣款",
+          "body": "向支付网络提交后如果连接断开，本系统只知道结果未知。后台协调器用原 providerRequestId 查询通道，回调与主动查询都转换为带 providerEventId 的统一事件，并按 PaymentAttempt 当前版本幂等应用。短期无法确认时保持 PROCESSING，达到业务时限后转为需要调查，而不是凭本地计时宣布失败。定时对账导入通道结算文件或流水，与 Attempt、订单和账本逐笔匹配，找出已扣未记、已记未扣及金额币种不符。任何修复都追加新事件和更正分录，不篡改原证据，这样才能在异步网络中保持财务完整性。",
+          "takeaway": "同一个通道请求号贯穿提交、查询、回调和对账，重试只重查状态而不重做扣款。"
+        },
+        {
+          "title": "不可变复式账本把资金守恒变成数据库可验证约束",
+          "body": "支付状态说明流程走到哪里，LedgerEntry 才说明钱从哪个账户流向哪个账户。每个 ledgerTransactionId 在单一事务中写入至少两条不可变分录，所有 debit 与 credit 按币种求和必须为零，并关联 paymentId、attemptId、businessEventId 和创建版本。已入账记录禁止 UPDATE 或 DELETE；退款、手续费调整和冲正通过新的反向分录表达。业务表更新、账本事务和 outbox 应处于同一本地事务边界，避免已经向下游宣告成功却没有资金证据。每日按商户、通道和币种做余额滚算，再与外部结算对账，差异可追溯到原事件。",
+          "takeaway": "余额是不可变复式分录的派生值，修正靠反向分录，不能改写历史。"
+        },
+        {
+          "title": "Webhook 投递是一个可重放产品协议，不是随手发出的 HTTP 请求",
+          "body": "Payment 状态提交时同事务写入 webhook outbox，事件包含稳定 eventId、paymentId、eventType、resourceVersion 与 occurredAt。投递器按商户端点读取，使用签名和时间戳防伪，有限指数退避；同一 eventId 可多次投递，因此接收方要幂等，事件版本帮助其拒绝状态倒退。成功以约定的 2xx 为准，永久 4xx、持续超时和签名配置错误进入可见的失败队列，并给商户控制台提供重放与端点停用。不同付款之间不承诺全局顺序，同一 paymentId 则按版本检查。绝不能在核心支付事务里同步等待商户服务器，否则一个慢端点会拖垮收款。",
+          "takeaway": "outbox 保证事件不丢，eventId 与版本承担重复和乱序语义，商户故障由独立队列隔离。"
+        },
+        {
+          "title": "令牌化缩小敏感数据边界，授权与审计必须覆盖每次访问",
+          "body": "卡号应由受控采集页面直接交给合规 tokenization 服务，核心 Payment API 只接收不可逆用途受限的 paymentMethodToken；日志、指标、消息和客服界面都禁止出现完整 PAN 或安全码。商户凭证按环境隔离，密钥放专用管理系统并定期轮换，服务间请求使用短期身份和最小权限。Webhook 使用按商户独立密钥签名并校验时间窗口，所有敏感读取和管理动作写入不可变审计记录。风险引擎可以拒绝或挑战高风险付款，但风控超时时要按金额、地区和商户策略决定 fail closed，不能用一个全局默认悄悄扩大欺诈面。",
+          "takeaway": "不持有原始卡数据是最有效的边界；令牌、最小权限、密钥轮换与审计共同缩小爆炸半径。"
+        },
+        {
+          "title": "一万 TPS 的扩展必须保留单笔付款顺序和商户级隔离",
+          "body": "入口按 merchantId 与 paymentId 稳定路由，创建 Intent 的唯一键落在同一分片；不同付款可并行，同一 paymentId 的事件必须按 resourceVersion 串行应用。外部通道调用进入分商户或分通道的有界队列，突发流量由配额和背压吸收，队列年龄超过支付时效就拒绝新请求而不是无限堆积。账本分区仍要保证单个 ledgerTransaction 的平衡分录同事务提交，跨分区汇总走异步报表。热门大商户使用独立分区和限额，避免拖垮长尾。容量看创建 TPS、通道延迟、未知结果年龄、outbox 积压、账本提交 p99 与对账差异，而非只看 API QPS。",
+          "takeaway": "按付款并行、按单笔版本有序，队列和租户隔离吸收突发但不放松资金不变量。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "支付网络收到扣款后本地请求超时，客户端用同一幂等键重试时系统究竟返回什么？",
+          "trigger": "候选人把超时直接标成失败，或每次重试都重新调用支付网络时追问。",
+          "answer": "创建接口先以 merchantId、idempotencyKey 建唯一 PaymentIntent，并把请求参数摘要一同保存；相同键但金额不同必须报冲突。第一次调用支付网络时生成稳定 providerRequestId 并记录 PaymentAttempt。超时后 Intent 保持 PROCESSING，重试查询并返回同一个 paymentId、相同 Attempt 和当前已知状态，不再次生成扣款请求。后台用原请求号主动查询通道，回调也按 providerEventId 去重；只有获得明确失败证据且通道契约允许时，才创建下一 Attempt。若长时间未知则进入对账队列。这样“API 被调用一次”不是目标，“一个商户意图最多产生一笔有效资金结果”才是端到端保证。",
+          "follow_up": "相同幂等键第二次带了不同金额，你返回旧结果、覆盖参数还是拒绝？为什么？",
+          "common_miss": "只建请求去重缓存，缓存过期后仍可能重复扣款，也没有保存参数摘要和外部请求号。",
+          "repair": "补画 Intent、Attempt 与 providerRequestId 的状态机，并演练响应丢失后的三次重试。",
+          "sources": [
+            {
+              "source": "hi.breakdown.payment-system",
+              "heading": "3) The system should guarantee transaction safety and financial integrity despite the inherently asynchronous nature of external payment networks"
+            },
+            {
+              "source": "ddia.ch13",
+              "heading": "唯一标识请求"
+            }
+          ]
+        },
+        {
+          "question": "为什么 Payment 状态表不能充当财务账本；退款和人工修正又如何不破坏审计？",
+          "trigger": "候选人只保存 SUCCESS/REFUNDED 和当前余额，无法解释资金路径或历史修正时追问。",
+          "answer": "状态表是工作流投影，会因迟到回调而变化，无法单独证明每一分钱的来源。账本应以 ledgerTransactionId 写不可变复式分录，按同一币种的 debit 与 credit 总和为零，并关联 paymentId、外部证据和业务事件；平衡检查、唯一业务事件约束与分录插入在一个数据库事务内。退款写一笔新的反向交易，人工调整也使用带审批人和原因码的新分录，绝不更新旧记录。余额由分录派生并可从头重算。恢复后将账本汇总与支付通道结算文件逐笔对账，任何差异保留调查链路，这比“数据库有备份”更接近耐久与可审计承诺。",
+          "follow_up": "账本事务成功而订单状态更新失败时，用户和客服看到什么，如何自动收敛？",
+          "common_miss": "把可变余额字段和普通操作日志称为账本，没有复式平衡、不可变更正和外部对账。",
+          "repair": "为付款、退款各写一组平衡分录，并证明删除任一条都会触发完整性检查。",
+          "sources": [
+            {
+              "source": "hi.breakdown.payment-system",
+              "heading": "2) The system should guarantee durability and auditability with no transaction data ever being lost, even in case of failures."
+            },
+            {
+              "source": "ddia.ch13",
+              "heading": "为可审计性而设计"
+            },
+            {
+              "source": "hi.deep.postgres",
+              "heading": "Transactions"
+            }
+          ]
+        },
+        {
+          "question": "商户 Webhook 端点超时、返回 500 或乱序恢复时，怎样做到不阻塞支付又让商户最终补齐状态？",
+          "trigger": "候选人在支付请求里同步调用商户端点，或声称消息队列会恰好投递一次时追问。",
+          "answer": "支付状态与包含稳定 eventId、paymentId、resourceVersion 的 outbox 记录在同一本地事务提交，核心请求随后即可返回。独立投递器按端点隔离队列，请求带时间戳签名；网络超时和 5xx 使用有限指数退避，相同 eventId 可以重复发送，接收方据此去重并按 resourceVersion 防止状态倒退。持续失败进入死信而不删除，控制台展示最后响应、下次重试和手工重放按钮。端点恢复后从未确认事件继续投递，必要时提供按 paymentId 拉取当前状态的 API 作为修复路径。不同付款可并行，不承诺全局顺序，但签名、事件版本和审计记录必须始终保留。",
+          "follow_up": "商户先收到 REFUNDED 后又收到迟到的 SUCCEEDED，接收方和发送方分别如何处理？",
+          "common_miss": "只说重试，没有稳定事件标识、签名、版本、端点隔离与可操作的死信恢复。",
+          "repair": "定义 Webhook 请求体、签名头、2xx 确认规则，并演练乱序与重复各一次。",
+          "sources": [
+            {
+              "source": "hi.breakdown.payment-system",
+              "heading": "1) How can we expand the design to support Webhooks?"
+            },
+            {
+              "source": "hi.core.api-design",
+              "heading": "HTTP Methods"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "确认应答与重新传递"
+            }
+          ]
+        },
+        {
+          "question": "如果你不想让核心系统接触卡号，完整的令牌化、密钥和日志边界该如何画？",
+          "trigger": "候选人只说加密数据库，却仍让 PAN 流经普通 API、队列、日志和客服工具时追问。",
+          "answer": "浏览器或移动端使用受控采集组件把卡数据直接发送到合规 tokenization 服务，核心 Payment API 只得到绑定商户与用途的 paymentMethodToken；安全码不落盘，完整 PAN 不进入应用日志、追踪、消息或数据仓库。商户 API 凭证按环境隔离，服务间采用短期身份和最小权限，令牌解引用只允许专门的通道适配器。密钥存入专用管理系统，轮换有双密钥过渡和审计。Webhook 另用每商户密钥及时间戳签名防重放。访问敏感令牌、改变路由或执行退款都写不可变审计事件，并以脱敏测试验证错误堆栈也不会泄漏。",
+          "follow_up": "令牌服务不可用时，你选择 fail closed 还是缓存令牌映射；各自风险是什么？",
+          "common_miss": "把静态加密等同于安全，没有缩小数据流、权限和运维工具中的敏感边界。",
+          "repair": "画一张卡数据流图，逐跳标出是否看见 PAN、持有什么身份以及产生何种审计记录。",
+          "sources": [
+            {
+              "source": "hi.breakdown.payment-system",
+              "heading": "1) The system should be highly secure"
+            },
+            {
+              "source": "hi.core.api-design",
+              "heading": "Security Considerations"
+            }
+          ]
+        },
+        {
+          "question": "系统扩到一万 TPS 时，如何分片和排队而不让同一付款乱序，也不让一个大商户压垮所有人？",
+          "trigger": "候选人只说加 Kafka 和数据库分片，没有给键、顺序域、队列上限及账本事务边界时追问。",
+          "answer": "Intent 创建以 merchantId、idempotencyKey 的唯一性为起点，后续事件按 paymentId 分区，让同一付款的 resourceVersion 顺序应用，不同付款横向并行。外部通道调用按商户与 provider 建有界队列和独立并发配额；大商户可迁入专属分区，队列年龄超过付款时效时显式限流或拒绝，不能无限积压。账本按账户或商户规划分区，但一笔 ledgerTransaction 的平衡分录必须落在可原子提交的边界，跨分区分析异步完成。扩容迁移采用双读校验和写所有权世代，旧 owner 不能继续写。验收同时看吞吐、单笔版本倒退、未知结果年龄、商户噪声隔离和对账差异。",
+          "follow_up": "某个全球商户本身成为单分区热点，如何再拆而仍维持其幂等键与账本约束？",
+          "common_miss": "队列吞吐提高了，却没有限制积压年龄、租户隔离或单付款事件顺序。",
+          "repair": "给出 paymentId 分区键、商户配额和热点迁移协议，并在节点故障下验证版本单调。",
+          "sources": [
+            {
+              "source": "hi.breakdown.payment-system",
+              "heading": "4) The system should be scalable to handle high transaction volume (10,000+ TPS)"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Handling Bursts with Queues and Load Shedding"
+            },
+            {
+              "source": "hi.deep.postgres",
+              "heading": "Transactions"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

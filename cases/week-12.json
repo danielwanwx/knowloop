@@ -1,0 +1,175 @@
+{
+  "week": 12,
+  "theme": "LLM 服务、GPU 调度与全路线 Capstone",
+  "audio_preview": {
+    "title": "Week 12｜ChatGPT 服务系统两分钟预听",
+    "script": "设计 ChatGPT 时，把大模型当作一个昂贵、流式、可取消的黑盒服务，不讨论训练模型本身。用户发送消息后，API 先把 user message 以幂等方式写进 conversation，再创建 generation run；调度器根据模型、上下文长度、付费层级和 GPU 容量排队，worker 开始生成后通过 Server-Sent Events 把 token 流给客户端。客户端断线不代表 run 必须继续：要有 cancel、timeout 和 reclaim GPU 的协议。真正稀缺的不是普通 API QPS，而是 token-seconds、KV cache 和 GPU memory，所以公平调度要按预计成本而不是请求数限流。长对话每轮都重发全部历史会让首 token 延迟和成本持续增长，可以截断、摘要或缓存稳定前缀，但摘要必须带版本并保留原消息作为权威记录。生产级答案还要讲 overload shedding、模型故障回退、内容安全、租户隔离、trace 与 eval。最后记住：agent 或 tool calling 只是可选的应用层扩展；只有当任务需要动态决策时才引入，并且所有工具权限、参数校验和副作用确认都必须留在可信运行时。试听后请关掉页面，从 admission、queue、GPU、stream 到 conversation persistence 画一次完整时序，并为断线、取消、超时和重复计费分别标出唯一的修复责任方。"
+  },
+  "projects": [
+    {
+      "slug": "chatgpt",
+      "title": "ChatGPT",
+      "source": "hi.breakdown.chatgpt",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "一张区分 conversation persistence、generation run、GPU scheduler、worker 与 token stream 的 ChatGPT HLD。",
+        "acceptance": [
+          "把 LLM 当作外部黑盒，设计重点落在 serving、状态、调度、流式输出和成本。",
+          "消息写入、run 创建与重试有幂等边界，断线和取消不会留下无限消耗 GPU 的任务。",
+          "TTFT、stream smoothness、queue wait、token throughput 和 cost 有明确 SLO/指标。"
+        ],
+        "repair": "若答案开始讲 transformer 训练或向量数据库，先回到 send prompt、resume conversation 两条用户路径，重写服务状态和请求时序。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we stream tokens back to the client?",
+          "3) How do we route and schedule generation requests across GPU workers?",
+          "4) How do we keep heavy users from taking over the GPU pool while giving paid tiers a better experience?",
+          "5) As conversations get longer, how do we control inference cost without making the assistant feel forgetful?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.chatgpt",
+        "deliverable": "SSE 流、GPU admission/scheduling、按 token 成本公平限流、长上下文策略、取消与 overload failure matrix。",
+        "acceptance": [
+          "能解释 TTFT 与总生成时长不同，并处理 backpressure、断线、恢复和取消。",
+          "调度键包含模型、上下文长度、预计输出和服务层级，不用普通 FIFO 掩盖 GPU 成本。",
+          "摘要、截断与 prefix/KV cache 的质量、版本、隐私和失效风险都有 repair path。"
+        ],
+        "repair": "把一次 generation run 从 admission 到 GPU 回收画成状态机；每个转移写 timeout、cancel、retry、metric 和用户状态。"
+      },
+      "concepts": [
+        {"source": "hi.core.api-design", "heading": "Returning Data", "why": "定义同步创建、流式响应、错误和取消契约。"},
+        {"source": "hi.pattern.realtime-updates", "heading": "Server-Sent Events (SSE): The Efficient One-Way Street", "why": "匹配服务器单向 token 流与浏览器支持。"},
+        {"source": "hi.pattern.realtime-updates", "heading": "\"How do you handle connection failures and reconnection?\"", "why": "明确断线后的 run 状态、resume token 与取消。"},
+        {"source": "hi.pattern.long-running-tasks", "heading": "The Solution", "why": "把 generation 建模为可排队、可取消、可观察的长任务。"},
+        {"source": "hi.core.caching", "heading": "Cache Consistency", "why": "分析 prompt/prefix cache、conversation version 与模型版本失效。"},
+        {"source": "hi.core.data-modeling", "heading": "Entities, Keys & Relationships", "why": "分开 conversation、message、run、model deployment 与 usage record。"},
+        {"source": "hi.core.cap-theorem", "heading": "Different Levels of Consistency", "why": "区分消息持久化、usage ledger、presence 和 analytics 的一致性。"}
+      ],
+      "ddia": [
+        {"source": "ddia.ch2", "heading": "描述性能", "why": "用 TTFT、queue wait、tokens/s 与 tail latency 描述体验。"},
+        {"source": "ddia.ch2", "heading": "可靠性与容错", "why": "定义 GPU/worker/stream 局部失败的降级。"},
+        {"source": "ddia.ch6", "heading": "复制延迟的问题", "why": "解释刚写消息在另一 region 恢复对话的可见性。"},
+        {"source": "ddia.ch12", "heading": "消息传递系统", "why": "理解排队、消费、重放与背压。"},
+        {"source": "ddia.ch13", "heading": "数据库的端到端原则", "why": "把幂等、usage 计费、取消和工具副作用连成端到端协议。"}
+      ],
+      "ai_extensions": [
+        {
+          "source": "openai.building-agents",
+          "heading": "Augmenting your agents with tools",
+          "why": "只在 ChatGPT 项目中延伸到 agent loop、工具与 guardrail；不替代 serving 主线。"
+        },
+        {
+          "source": "anthropic.building-effective-agents",
+          "heading": "When (and when not) to use agents",
+          "why": "先选择可预测 workflow，只有动态决策确实产生价值时才增加 agent 自主性。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "先把 LLM 当成昂贵的黑盒依赖",
+          "body": "这道题的范围是 ChatGPT 产品 serving，不是训练 transformer。核心实体至少有 conversation、message、generation run、model deployment 和 usage record。用户提交 prompt 时，服务先用 client_message_id 幂等写入 user message，再创建 run；只有消息持久化成功才能让历史对话可恢复。run 记录 queued、running、completed、failed、cancelled 等状态，并引用不可变的输入 conversation version。这样 API 超时重试不会重复生成或重复计费，模型 worker 也不需要承担业务真相。assistant message 只在 run 完成后成为正式版本；失败尝试保留 attempt、错误和 usage，便于恢复、对账与判断是否应向用户收费。这个边界也让模型部署替换不改变对话事实。",
+          "takeaway": "消息是可恢复事实，run 是昂贵且可取消的执行；两者不能混成一个请求。"
+        },
+        {
+          "title": "流式输出优化的是 Time to First Token",
+          "body": "用户更在意按下发送后多久看到第一个 token，而不是完整答案何时结束。API gateway 建立 SSE，worker 生成小批 token 后经过 stream service 推送；每个 chunk 带 run_id 和递增序号，便于检测缺口。服务必须处理 backpressure：慢客户端不能无限占用内存或 GPU，可设置缓冲上限、暂停读取或取消 run。断线后是继续后台生成、允许短窗口 resume，还是立即取消，要由产品和成本共同决定；无论哪种都要有显式状态，而不是依赖 TCP 连接是否存在。",
+          "takeaway": "SSE 只是传输，run 状态、序号、背压和取消才决定流是否可靠。"
+        },
+        {
+          "title": "GPU 调度按成本而不是请求数",
+          "body": "两个请求都算一次 QPS，但 500 token 上下文与 100k token 上下文的 prefill、显存和执行时间完全不同。admission controller 先按模型、上下文长度、预计输出、租户余额和服务层级估算 token-seconds，再进入分层队列。scheduler 可在同模型与相近长度间 continuous batching，减少 padding 浪费；同时用 weighted fair queue 或每租户并发上限避免重用户霸占 GPU。模型加载和 KV cache 占用也影响路由，不能只按 worker CPU 或连接数做 round-robin。调度结果必须携带租约与 deadline；worker 丢失时由 scheduler 判定重排，而不是让两个 attempt 同时输出并重复计费。",
+          "takeaway": "稀缺资源是 GPU memory 与 token-seconds，公平和容量都必须用它们表达。"
+        },
+        {
+          "title": "过载时先保护边界，再谈扩容",
+          "body": "GPU 不可能像无状态 Web 服务一样瞬间扩容。队列等待超过 SLO 时，系统应在 admission 层拒绝低优先级请求、限制 max output、提示用户重试或降级到更小模型；已经运行的付费请求不应被无序挤掉。每个阶段都有 timeout：排队、prefill、decode、stream idle。worker 心跳丢失后 run 是否安全重试取决于客户端是否已经看到部分 token；通常要创建新的 attempt 并保留旧 attempt 的 trace，避免把两段输出静默拼接。降级响应要明确模型变化和质量边界，并通过 queue age、拒绝率、取消延迟和回收显存时间证明保护动作确实生效。",
+          "takeaway": "过载策略必须明确谁被拒绝、谁能降级、何时重试以及是否重复计费。"
+        },
+        {
+          "title": "长上下文是一条质量与成本曲线",
+          "body": "每轮都把全部历史传给模型会让 prefill 延迟和推理成本随对话增长。最简单策略是保留最近窗口并截断旧消息，但可能忘掉关键承诺；摘要能压缩历史，却会引入信息损失和摘要漂移，因此必须保存原消息、记录 summary_version，并在用户编辑或模型升级时失效。稳定 system prompt 和历史前缀可做 prompt/prefix cache，命中要求模型版本、tokenizer、权限与内容 hash 一致。Senior 答案要说明哪种对话允许哪种损失，并用长对话 eval 验证，而不是只说“做 RAG”。",
+          "takeaway": "上下文策略同时是产品记忆语义、缓存一致性和成本控制问题。"
+        },
+        {
+          "title": "Agent 延伸必须留在可信运行时",
+          "body": "只有在用户任务需要模型动态选择工具和多步决策时才引入 agent loop；确定性的检索、分类或工作流优先用普通编排。工具 schema、参数校验、OAuth/secret、租户授权、费用上限和高风险确认都属于可信应用运行时，不能靠模型承诺。每一步记录 trace、tool input/output、policy decision 和最终结果，离线用可重放 eval 验证成功率、越权、循环和成本。这个延伸只服务 ChatGPT/Agent 项目，不应反向污染 Bitly、Dropbox 等通用系统设计路线。所有有副作用的工具还要具备幂等键、审批状态和人工可撤销的补偿路径。",
+          "takeaway": "模型提出动作，可信运行时决定动作是否允许并留下可审计证据。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "为什么要先持久化 user message，再创建 generation run？",
+          "trigger": "候选人让 gateway 直接调用模型，生成完才一次性保存对话。",
+          "answer": "先持久化消息能让客户端超时、stream 断开或 worker 崩溃后仍恢复用户意图。写入使用 client_message_id 幂等，随后创建引用该 message/conversation version 的 run；重试查询同一 run，而不是再次生成。assistant message 可以按 chunk 暂存，完成后原子标记 final；失败则保留 run 状态和可见错误。若生成后才保存，模型已经消耗 GPU 但服务可能没有任何事实记录，既无法恢复，也容易重复计费和产生两份回答。",
+          "follow_up": "用户连续快速发送两条消息时，两个 run 的 conversation version 如何定义？",
+          "common_miss": "只谈数据库可靠性，没有幂等、状态和计费。",
+          "repair": "画 message 与 run 两个状态机，并标出 client_message_id 和 attempt_id。",
+          "sources": [
+            {"source": "hi.breakdown.chatgpt", "heading": "2) Users should be able to view past chats and resume a conversation with context carried across turns"},
+            {"source": "hi.core.data-modeling", "heading": "Entities, Keys & Relationships"}
+          ]
+        },
+        {
+          "question": "客户端关掉页面后，GPU 上的 generation 应该继续吗？",
+          "trigger": "候选人把 TCP 断开自动等同于任务取消，或永远继续。",
+          "answer": "产品需要显式策略。若答案会保存到对话，短暂断线可继续并允许客户端按 run_id/sequence resume；若用户明确点 stop，或 stream 在 grace period 后无人消费，应发送 cancel，worker 在安全 token boundary 停止并释放 KV cache。取消是幂等的，race 到 completed 时返回最终状态。还要设置总 token、wall-clock 和 idle timeout，防止孤儿 run 长期消耗 GPU。指标应区分 user cancel、disconnect cancel、timeout 和 worker abort，以便判断体验还是容量问题。scheduler 只有观察到租约释放或 worker 被隔离后才重新分配显存预算，避免账面回收与真实 GPU 占用脱节。",
+          "follow_up": "cancel 已发出但 worker 不响应，scheduler 什么时候能回收资源？",
+          "common_miss": "没有 grace period、resume 或资源回收证据。",
+          "repair": "写 queued/running/cancelling/cancelled/completed 竞争条件表。",
+          "sources": [
+            {"source": "hi.breakdown.chatgpt", "heading": "Cancelling a run and reclaiming the GPU"},
+            {"source": "hi.pattern.realtime-updates", "heading": "\"How do you handle connection failures and reconnection?\""}
+          ]
+        },
+        {
+          "question": "为什么普通 FIFO 队列会让 GPU 利用率和公平性都变差？",
+          "trigger": "候选人只按请求到达时间调度，不看模型和 token 成本。",
+          "answer": "FIFO 会让一个超长上下文请求阻塞大量短请求，造成 head-of-line blocking；不同模型无法在同一 worker 上自由切换，长度差异过大的 batch 还会产生 padding 和显存浪费。我会先按 model/deployment 分池，再按 context bucket 组织可合批请求，同时在租户和付费层级间做 weighted fair scheduling。admission 使用预计 input/output token 和并发限制，防止重用户垄断。调度目标同时看 TTFT、tokens/s、GPU utilization、queue age 和 starvation，不能只优化利用率。",
+          "follow_up": "高优先级请求持续涌入时，如何保证免费队列不会永久饥饿？",
+          "common_miss": "回答加更多 GPU，没有调度策略或成本单位。",
+          "repair": "用四个不同模型/长度/租户请求手算一次队列选择。",
+          "sources": [
+            {"source": "hi.breakdown.chatgpt", "heading": "3) How do we route and schedule generation requests across GPU workers?"},
+            {"source": "hi.breakdown.chatgpt", "heading": "4) How do we keep heavy users from taking over the GPU pool while giving paid tiers a better experience?"}
+          ]
+        },
+        {
+          "question": "长对话为什么不能简单地永远做摘要？",
+          "trigger": "候选人把 summary 当成无损压缩，未讨论版本与质量。",
+          "answer": "摘要会选择性丢失细节，也可能把模型误解固化到后续每轮。应保留原始 messages 作为 source of truth，summary 只是带覆盖范围、模型和 prompt 版本的派生数据；新消息、用户编辑、模型升级或质量告警可触发重算。不同对话类型的损失容忍度不同：闲聊可更激进压缩，代码或法律上下文需要保留关键原文。要用长对话 golden set 评估事实保持、指令保持、TTFT 和成本，摘要失败时回退到更长原文窗口。",
+          "follow_up": "两个并发 run 都想更新同一个 conversation summary，如何避免覆盖？",
+          "common_miss": "没有原始历史、summary version、失效或 eval。",
+          "repair": "为 summary 写 source range、version、model、invalidated_at 字段并列出触发器。",
+          "sources": [
+            {"source": "hi.breakdown.chatgpt", "heading": "5) As conversations get longer, how do we control inference cost without making the assistant feel forgetful?"},
+            {"source": "hi.core.caching", "heading": "Cache Consistency"}
+          ]
+        },
+        {
+          "question": "加入 tool calling 后，模型能否直接执行支付或删除动作？",
+          "trigger": "候选人认为模型输出了合法 JSON 就可以执行。",
+          "answer": "不能。模型输出是不可信提议，可信 runtime 必须验证 schema、业务不变量、用户/租户授权、幂等键、费用和风险级别。支付、删除、外发消息等高影响动作需要明确确认或预先授权策略；secret 不进入 prompt，工具只拿最小权限短期凭证。每个 tool call 记录 trace 和结果，失败重试要区分只读与有副作用操作，避免重复执行。还要设置最大步骤、预算和循环检测，并用官方框架建议的 eval/guardrail 思路做回归。",
+          "follow_up": "工具调用成功但结果回传模型前进程崩溃，重试如何避免重复副作用？",
+          "common_miss": "把 JSON schema 验证等同于权限和业务安全。",
+          "repair": "为一个有副作用工具写完整 trust boundary、approval 与 idempotency contract。",
+          "sources": [
+            {"source": "openai.building-agents", "heading": "Augmenting your agents with tools"},
+            {"source": "anthropic.building-effective-agents", "heading": "When (and when not) to use agents"}
+          ]
+        }
+      ]
+    }
+  ]
+}

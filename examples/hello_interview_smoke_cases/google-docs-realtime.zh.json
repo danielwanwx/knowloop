@@ -1,0 +1,80 @@
+{
+  "title": "Google Docs Realtime Collaboration",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "architecture",
+  "summary": "协同编辑的重点是低延迟广播、冲突合并和可恢复的操作日志。",
+  "task": "设计多人同时编辑文档，要求用户能实时看到别人的修改和光标。",
+  "constraints": [
+    "用户体验需要低延迟，但持久化不能丢操作",
+    "多个客户端会并发修改同一段内容，需要 OT 或 CRDT 语义",
+    "断线重连后要能从版本或操作日志恢复"
+  ],
+  "blocks": [
+    {
+      "id": "client",
+      "lane": "top",
+      "kind": "client",
+      "shape": "circle",
+      "title": "Editors send operations",
+      "body": "客户端不要只上传整篇文档。更好的模型是发送小的编辑操作，并实时接收别人的操作和光标状态。"
+    },
+    {
+      "id": "ws",
+      "lane": "top",
+      "kind": "api",
+      "title": "WebSocket is transport, not truth",
+      "body": "WebSocket 解决低延迟双向通信，但它不是持久化层。连接层要能把同一个 document room 路由到正确后端。"
+    },
+    {
+      "id": "collab",
+      "lane": "middle",
+      "kind": "service",
+      "title": "Collaboration service owns correctness",
+      "body": "真正难点是并发编辑怎么合并。这里要做操作校验、排序，并用 OT 或 CRDT 语义处理冲突。"
+    },
+    {
+      "id": "presence",
+      "lane": "middle",
+      "kind": "cache",
+      "title": "Presence can be ephemeral",
+      "body": "光标、在线用户这类状态可以放 Redis。它们重要但可重建，丢了不应该影响文档内容正确性。"
+    },
+    {
+      "id": "stream",
+      "lane": "middle",
+      "kind": "queue",
+      "title": "Pub/Sub fans out accepted ops",
+      "body": "操作被协同服务接受后，再广播给房间里的其他客户端。广播顺序要和版本语义一致，否则客户端会看到不同文档状态。"
+    },
+    {
+      "id": "log",
+      "lane": "bottom",
+      "kind": "database",
+      "title": "Operation log enables recovery",
+      "body": "操作按 document version 追加到 log。断线重连时，客户端可以从最后确认版本补齐缺失操作。"
+    },
+    {
+      "id": "snapshot",
+      "lane": "bottom",
+      "kind": "storage",
+      "title": "Snapshots keep replay bounded",
+      "body": "如果只靠操作日志，文档越老恢复越慢。定期 snapshot 可以压缩状态，让读取和恢复成本稳定。"
+    }
+  ],
+  "connectors": [
+    {"from": "client", "to": "ws", "label": "persistent connection"},
+    {"from": "ws", "to": "collab", "label": "edit op"},
+    {"from": "collab", "to": "stream", "label": "broadcast"},
+    {"from": "collab", "to": "log", "label": "append"},
+    {"from": "collab", "to": "presence", "label": "cursor"},
+    {"from": "log", "to": "snapshot", "label": "compact"}
+  ],
+  "callouts": [
+    {
+      "title": "正确性边界",
+      "body": "协同语义优先于 fanout 优化。WebSocket 只负责传输，不能承担持久化或冲突合并。"
+    }
+  ],
+  "talk_track": "我会把实时协同拆成连接层、协同语义层和持久化层。WebSocket 负责低延迟双向通信，但真正的正确性在 collaboration service，它要处理操作排序和 OT/CRDT 合并。操作先写 append-only log，定期生成 snapshot；presence 可以放 Redis，因为丢了可以重建。"
+}

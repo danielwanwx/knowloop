@@ -1,0 +1,6 @@
+interface:
+  display_name: "Interview Coach · 全科面试教练"
+  short_description: "由浅入深陪学与面试训练，先自己答再追问，保存薄弱点并按表现安排复测"
+  default_prompt: "使用 $interview-coach 接着上次练；根据我的真实回答追问、纠正并保存下次复习重点。"
+policy:
+  allow_implicit_invocation: true

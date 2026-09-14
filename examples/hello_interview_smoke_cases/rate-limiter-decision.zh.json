@@ -1,0 +1,46 @@
+{
+  "title": "Distributed Rate Limiter Decision",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "decision",
+  "summary": "分布式限流要在准确性、延迟和全局一致性之间做取舍。",
+  "task": "为 API 网关设计限流，防止单个用户或租户压垮系统。",
+  "constraints": [
+    "每个请求都走限流，所以延迟必须很低",
+    "多网关实例需要共享计数或容忍局部近似",
+    "Redis 或本地 fallback 故障时不能让核心系统被冲垮"
+  ],
+  "blocks": [
+    {
+      "id": "question",
+      "kind": "component",
+      "title": "First decide what the limiter protects",
+      "body": "限流语义先分清保护系统还是严格计费配额。保护系统可接受局部近似；计费或安全场景需要共享全局状态。"
+    },
+    {
+      "id": "token",
+      "kind": "component",
+      "title": "Token bucket is the default",
+      "body": "Token bucket 适合限制长期速率并允许短 burst。算法简单、状态紧凑，适合 API 网关热路径。"
+    },
+    {
+      "id": "sliding",
+      "kind": "component",
+      "title": "Sliding window buys accuracy",
+      "body": "Sliding window 能减少固定窗口边界绕过问题。代价是计数更复杂，存储和计算成本更高。"
+    },
+    {
+      "id": "backend",
+      "kind": "caveat",
+      "title": "Backend choice changes failure behavior",
+      "body": "多网关共享 quota 时可以用 Redis 原子操作。但限流器在热路径上，Redis 故障时必须有本地 fallback。"
+    }
+  ],
+  "callouts": [
+    {
+      "title": "Senior caveat",
+      "body": "The limiter itself is on the hot path. Measure latency and define fail-open vs fail-closed by endpoint risk."
+    }
+  ],
+  "talk_track": "我会先问限流是为了保护系统还是严格计费。如果只是保护系统，token bucket 是默认选择，因为它允许短 burst 又能限制长期速率。多实例时用 Redis 原子操作共享计数，但 Redis 出问题时要有本地 fallback，并且按接口风险决定 fail-open 还是 fail-closed。"
+}

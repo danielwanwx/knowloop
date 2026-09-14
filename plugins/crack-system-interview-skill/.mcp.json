@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "excalidraw": {
+      "enabled": true,
+      "required": false,
+      "url": "https://mcp.excalidraw.com/mcp",
+      "startup_timeout_sec": 10,
+      "tool_timeout_sec": 60
+    }
+  }
+}

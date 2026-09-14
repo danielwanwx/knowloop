@@ -1,0 +1,636 @@
+{
+  "week": 4,
+  "theme": "社交 feed、媒体管线与全球读取",
+  "audio_preview": {
+    "title": "第 4 周导览：把元数据和大字节流拆开",
+    "script": "这一周覆盖 FB News Feed、Instagram 和 YouTube。三题都拥有巨大的读流量，却不能用一句“加 CDN”结束。News Feed 的核心是关注图与帖子如何形成每个人的有限 feed；Instagram 还加入大媒体上传、异步处理和首帧体验；YouTube 则把可恢复上传、多码率转码、不可变分片与播放清单连成完整管线。通读时先画事实和派生视图：帖子与关注边是事实，预计算 feed 可重建；原始媒体和发布版本是事实，缩略图、转码版本、缓存是派生。深挖时重点比较 fanout-on-write、fanout-on-read 和混合策略，解释名人账户为什么改变写放大；再把上传会话、校验和、处理状态、清单原子发布和 CDN 回源逐步讲清。热门内容带来的是单键热读，处理积压带来的是后台时延，二者不能用同一指标判断。mock 会在帖子已提交但扇出 worker 崩溃、视频只完成部分转码、旧清单仍在边缘缓存时追问。你要给出重放、版本切换、请求合并、降级与回滚路径。完成本周后，应能从访问模式推导索引和缓存，从状态机推导媒体工作流，并用首帧、缓冲比、feed 可见延迟和不可发现率证明设计真的服务用户。使用时先暂停音频，凭记忆画出事实状态、提交点和故障分支，再继续核对。每天结束前必须留下可复查的图、容量计算和一条 repair 记录；如果答案只能说出组件名，就回到原文对应标题，把请求时序与用户可见结果补全。周末的综合 mock 不追求背诵固定架构，而要在约束变化后仍能守住不变量、说明取舍，并用指标决定降级、扩展和回滚。"
+  },
+  "projects": [
+    {
+      "slug": "fb-news-feed",
+      "title": "FB News Feed",
+      "source": "hi.breakdown.fb-news-feed",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 FB News Feed 端到端设计图：标出 帖子事实、关注边与预计算 feed 条目、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 创建帖子后如何选择扇出写或保留为读时合并 与 在五百毫秒内返回逆时间序分页且容忍一分钟陈旧，每条箭头标明协议或数据。",
+          "明确 帖子事实持久化后返回 postId，feed 扇出作为可重放派生事件，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 帖子事实、关注边与预计算 feed 条目，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we handle users who are following a large number of users?",
+          "2) How do we handle users with a large number of followers?",
+          "3) How can we handle uneven reads of Posts?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.fb-news-feed",
+        "deliverable": "提交 FB News Feed 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 3 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "Add External Caching Layers",
+          "why": "缓解病毒帖对事实表的热读。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Handling Bursts with Queues and Load Shedding",
+          "why": "异步切分名人扇出任务。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Indexing for Access Patterns",
+          "why": "为关注边、帖子与 feed 游标建模。"
+        },
+        {
+          "source": "hi.deep.redis",
+          "heading": "Hot Key Issues",
+          "why": "处理病毒帖子造成的缓存分片倾斜。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch12",
+          "heading": "维护物化视图",
+          "why": "把预计算 feed 视为可重建派生数据。"
+        },
+        {
+          "source": "ddia.ch7",
+          "heading": "倾斜的工作负载与缓解热点",
+          "why": "处理名人与病毒帖。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "保证扇出任务安全重放。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "先定义一条可分页的时间线契约",
+          "body": "News Feed 的基础契约不是“推荐最相关内容”，而是把所关注作者的帖子按倒序稳定返回。Post 以 postId 保存正文与 createdAt，Follow 记录 viewerId 到 authorId 的边；第一页请求还要冻结一个 upperBound，后续 cursor 编码最后一条的 createdAt 与 postId。这样新帖插入列表头部时不会把旧内容推到下一页造成重复，同一毫秒的帖子也能靠 postId 决胜。删除或不可见帖子可以在读取时过滤并多取候选，但不能改用 offset 后让每次插入都移动页边界。",
+          "takeaway": "先把排序键和 cursor 的稳定性讲清，再讨论 feed 怎样预计算。"
+        },
+        {
+          "title": "普通作者走 fanout-on-write",
+          "body": "普通用户发布帖子后，Post Service 先只提交帖子事实和一条 outbox 事件，不能等待成百上千个 feed 写完才响应。扇出 worker 按 followerId 范围切块，每个任务把 postId 幂等地 prepend 到对应 PrecomputedFeed，并把列表截断在固定窗口。队列至少一次投递意味着同一块可能被重复处理，因此 feed 项应以 viewerId、postId 去重；worker 中途崩溃只需从未完成块继续。这个路径把昂贵工作移出请求，但必须给出“发帖成功到粉丝可见”的陈旧预算。批次水位还要能指出哪段粉丝范围尚未完成，便于定向重放。",
+          "takeaway": "帖子提交与 feed 物化分开，用 outbox、切块和幂等写保证最终可见。"
+        },
+        {
+          "title": "名人账户改用混合扇出",
+          "body": "给九千万粉丝逐个写 feed 会制造不可接受的写放大，所以高粉丝作者不进入普通预扇出。Feed Service 读取 viewer 的预计算列表，同时查询其关注的名人最近帖子，将两组有序流按 createdAt、postId 做 k 路归并，再截取一页。阈值不能写成永久常量，应由 follower 数、发帖频率、扇出队列时延和读放大共同决定；一个高粉丝但很少发帖的作者与持续高频发布者成本不同。为了控制尾延迟，读侧可以并行拉取并限制名人候选窗口，超时时返回预计算部分并标记可继续刷新。",
+          "takeaway": "按作者成本选择写时或读时扇出，在请求端做有界归并。"
+        },
+        {
+          "title": "预计算 feed 只是可重建视图",
+          "body": "PrecomputedFeed 不是帖子真相，它可能因 worker 重试出现重复，也可能在区域故障后暂时落后。恢复时从 Post 与 Follow 的事实水位重新生成某个 viewer 的窗口，比手工修补未知缺口更可靠。每条 feed 项记录来源 postId 和 materializedAt，巡检任务抽样比较“应出现的关注帖子”与实际窗口，发现缺失后投递定向修复。若总队列积压超过一分钟陈旧预算，系统可以暂时对受影响用户回退到按关注作者查询，而不是继续返回一个看似成功但长期缺项的列表。",
+          "takeaway": "为派生 feed 保留重建、抽样对账和读时降级三条恢复路径。"
+        },
+        {
+          "title": "病毒帖要解决单键热读",
+          "body": "一条爆款帖子会让大量 Feed 请求同时读取同一个 postId，即使整体数据库 QPS 不高，也可能压垮承载该键的分区。应用缓存之外还需请求合并：某个缓存节点只允许一个 miss 回源，其余等待同一结果；特别热的不可变帖子可以复制成带盐的若干缓存键，由读方随机选择。帖子编辑或删除时用版本化 key 发布新版本，并让旧版本短 TTL 退场，避免全网同步失效形成惊群。缓存只保存内容，权限和删除判定仍要走可更新的元数据路径。",
+          "takeaway": "热点治理针对单个 postId 的负载形状，而不是笼统扩大缓存集群。"
+        },
+        {
+          "title": "用三类水位判断 feed 是否健康",
+          "body": "只看 Feed API 的 p99 会漏掉“很快地返回旧数据”。用户体验指标应同时包含请求尾延迟、首屏空缺率和发帖到可见的分位数；管线指标看 outbox 未发布数、扇出队列最老年龄、每个 worker 的 follower 写速率；正确性指标则抽样计算重复 postId、关注帖子缺失和 cursor 倒退。名人阈值调整要做小流量对照，观察读合并成本是否抵消写放大的收益。事故恢复完成的标准不是队列清零，而是可见延迟恢复并且抽样对账差异回到基线。",
+          "takeaway": "延迟、积压与内容正确性要同屏观察，缺一项都可能误判。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "什么时候把作者从 fanout-on-write 切换为 fanout-on-read？",
+          "trigger": "候选人用一个固定粉丝数拍板，未考虑发帖频率和读写成本。",
+          "answer": "我会估算作者每篇帖子的 follower 写放大、每日发帖次数，以及这些粉丝实际打开 feed 的比例。预扇出的成本近似 followerCount × postRate，读时合并的成本则受 activeFollowers、名人关注数和每次候选窗口影响。阈值由队列陈旧预算和 Feed Service 的 p99 共同校准，超过阈值先在小比例作者上切换；读端必须能同时合并预计算列表与名人帖子，才能在阈值变化时不中断用户视图。",
+          "follow_up": "某位作者突然爆红时，如何在已有扇出任务尚未完成的情况下切换？",
+          "common_miss": "只谈粉丝数，没有双写过渡、去重规则或读侧归并。",
+          "repair": "为一位粉丝数快速增长的作者画出旧任务排空、标记切换和读侧去重时序。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-news-feed",
+              "heading": "1) How do we handle users who are following a large number of users?"
+            },
+            {
+              "source": "hi.breakdown.fb-news-feed",
+              "heading": "2) How do we handle users with a large number of followers?"
+            }
+          ]
+        },
+        {
+          "question": "Post 已提交，但 fanout worker 在写第一批 feed 后崩溃，怎样证明不会永久漏帖？",
+          "trigger": "候选人认为队列会自动解决一切，没有事件与批次的持久边界。",
+          "answer": "Post 事务同时写 outbox，发布器可重复发送同一 post-created 事件；扇出任务再按 follower 范围生成稳定 batchId。每个 feed 更新以 viewerId、postId 幂等 upsert，批次只有覆盖完整范围后才记录完成，所以崩溃后重跑不会重复展示。监控以事件最老年龄和未完成范围为准，超预算时对受影响 viewer 启用读时合并。最后抽样从 Follow 与 Post 重新计算期望窗口，验证物化视图确实收敛。",
+          "follow_up": "如果 follower 关系在扇出过程中改变，批次使用哪个关注快照？",
+          "common_miss": "用“至少一次投递”替代幂等键、批次水位与对账。",
+          "repair": "补出 outbox、batchId、feed 唯一键和期望窗口巡检四个证据。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-news-feed",
+              "heading": "2) How do we handle users with a large number of followers?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "维护物化视图"
+            }
+          ]
+        },
+        {
+          "question": "为什么 feed 翻页不能用 offset，cursor 应包含什么？",
+          "trigger": "候选人的下一页在新帖插入或删除后出现重复、跳项。",
+          "answer": "倒序时间线持续插入，offset=20 的含义会随着列表头新增内容而移动，第二页可能重新读到第一页末尾。cursor 至少包含上页最后一条的 createdAt 与 postId，并用“严格小于这个二元组”查询；首请求还可以记录 upperBound，保证整次浏览不会吸入后来发布的帖子。同一时间戳由 postId 提供全序，过滤删除项时多取候选但仍沿原排序游标前进。这个 cursor 与底层复合索引一致，查询成本不会随页数线性增长。",
+          "follow_up": "多个来源在读时归并后，如何生成一个可恢复的统一 cursor？",
+          "common_miss": "只把最后 postId 放进游标，却无法表达多个作者流各自读到哪里。",
+          "repair": "用三位作者、同时间戳和一次删除手算两页结果，证明无重复无遗漏。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-news-feed",
+              "heading": "4. Users should be able to page through their feed."
+            },
+            {
+              "source": "hi.core.data-modeling",
+              "heading": "Indexing for Access Patterns"
+            }
+          ]
+        },
+        {
+          "question": "一个 postId 占到缓存集群 30% 的读流量，扩容为什么可能没用？",
+          "trigger": "候选人只增加分片数，却没有改变单键仍映射到一个节点的事实。",
+          "answer": "普通一致性哈希只会把这个 postId 放到其中一个分片，新节点无法共同承担读流量。若内容近乎不可变，我会在应用层创建若干带版本和 salt 的副本键，读请求随机选择；每个节点再做 request coalescing，避免并发 miss 同时回源。编辑或删除发布新版本，旧副本短 TTL 退场，并保留事实库的删除检查。要观察单键 QPS、缓存节点带宽、回源并发和旧版本命中，确认复制没有把一致性风险藏起来。",
+          "follow_up": "如果帖子包含经常变化的点赞数，你还会把整个对象一起复制吗？",
+          "common_miss": "把热键与缓存总容量混为一谈，忽略网络带宽和回源风暴。",
+          "repair": "拆开不可变正文与易变计数，为两者分别给缓存键和失效策略。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-news-feed",
+              "heading": "3) How can we handle uneven reads of Posts?"
+            },
+            {
+              "source": "hi.deep.redis",
+              "heading": "Hot Key Issues"
+            }
+          ]
+        },
+        {
+          "question": "用户关注十万账户时，如何把一次 feed 读取限制在可预测成本内？",
+          "trigger": "候选人打算每次向十万作者逐一查询并全量排序。",
+          "answer": "这类高出度 viewer 应拥有有限长度的预计算 feed，发布侧持续把普通作者的新 postId 写入窗口；名人作者仍走少量读时合并。读取只取固定数量的预计算候选和每个例外来源的有界最近窗口，再用堆做 k 路归并。窗口之外的极深历史可以明确不保证，或低频回退到事实表生成。成本上限由候选数而不是关注总数决定，同时以 feed 新鲜度和回退率监控是否需要扩大窗口。",
+          "follow_up": "预计算窗口只有 200 条，用户读到末尾时产品应该怎样定义行为？",
+          "common_miss": "为了理论上的无限翻页，给在线路径引入无界 fan-in。",
+          "repair": "写出候选上限、归并复杂度和深历史产品边界。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-news-feed",
+              "heading": "1) How do we handle users who are following a large number of users?"
+            },
+            {
+              "source": "hi.breakdown.fb-news-feed",
+              "heading": "3. Users should be able to view a feed of posts from people they follow."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "instagram",
+      "title": "Instagram",
+      "source": "hi.breakdown.instagram",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Instagram 端到端设计图：标出 媒体上传会话、帖子元数据与关注 feed、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 大照片/视频如何直传、处理并最终发布成帖子 与 五百毫秒内返回 feed 元数据并让媒体近乎即时开始渲染，每条箭头标明协议或数据。",
+          "明确 帖子元数据以 READY 媒体版本条件写成功后返回 postId，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 媒体上传会话、帖子元数据与关注 feed，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) The system should deliver feed content with low latency (< 500ms )",
+          "2) The system should render photos and videos instantly, supporting photos up to 8mb and videos up to 4GB",
+          "3) The system should be scalable to support 500M DAU",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.instagram",
+        "deliverable": "提交 Instagram 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 3 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Workers",
+          "why": "管理异步媒体处理和状态。"
+        },
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "CDN and Edge Caching",
+          "why": "利用边缘缓存承载热门媒体。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Entities, Keys & Relationships",
+          "why": "分离 upload、media、post 与 feed。"
+        },
+        {
+          "source": "hi.deep.dynamodb",
+          "heading": "Partition Key and Sort Key",
+          "why": "支撑按用户帖子、关注边与 feed 的访问模式。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch12",
+          "heading": "失败后重建状态",
+          "why": "从媒体事实重建缩略图与 feed。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "保证分片完成与转码重试安全。"
+        },
+        {
+          "source": "ddia.ch7",
+          "heading": "键值数据的分片",
+          "why": "扩展帖子元数据与 feed。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "发布帖子是媒体状态机的最后一步",
+          "body": "Instagram 的 Post 不能在客户端刚拿到上传地址时就变成可见。UploadSession 先记录 owner、允许的对象前缀、分片清单和过期时间；对象完成后校验大小、类型与 checksum，MediaVersion 再经历 SCANNING、PROCESSING、READY 或 FAILED。创建 Post 时用条件写确认引用的 mediaVersion 属于当前用户且处于 READY，随后才发布 postId。这样处理 worker 重试、用户重复点发布或孤儿对象清理都不会产生公开破图。发布服务还要记录 mediaVersion 的处理年龄和最后错误，使作者能看到失败原因，运营也能找出长期卡住的版本。",
+          "takeaway": "把上传完成、媒体就绪和帖子发布分成三个可查询的承诺。"
+        },
+        {
+          "title": "大视频直传而不穿过应用服务器",
+          "body": "四 GB 视频若经 Post Service 中转，会同时占满其连接、内存和东西向带宽。更合适的协议是服务端创建 uploadId 并签发限时、限定对象键与 part 范围的上传凭证，客户端把分片直接送入对象存储；完成请求携带 part 编号与校验值，服务端核对清单后 finalize。断线时客户端先查询已持久化的 part 集合，只补缺失片段。凭证的对象前缀绑定 userId，finalize 也必须幂等，防止凭证被拿去覆盖别人的媒体。上传进度以服务端清单为准，不采信客户端自报。",
+          "takeaway": "控制面负责授权和状态，字节面直接进入对象存储。"
+        },
+        {
+          "title": "同一原片派生多种交付版本",
+          "body": "上传完成后，媒体管线按 mediaVersion 生成缩略图、不同分辨率图片和视频 rendition。每个任务的输出键包含输入 checksum、处理配置版本与 rendition 名称，因此同一任务重复消费只会命中相同不可变结果。协调器维护必需输出集合，只有全部校验通过才把版本标为 READY；非关键增强可以稍后补齐。若处理规则升级，新版本并行生成，Post 仍指向旧的完整集合，待新 manifest 验证后一次切换，避免用户在滚动时读到一半新一半旧。",
+          "takeaway": "输出内容寻址、任务幂等、manifest 原子切换让媒体处理可安全重放。"
+        },
+        {
+          "title": "feed 返回元数据，媒体由边缘单独交付",
+          "body": "Feed API 应返回 postId、作者、caption、媒体 manifest、尺寸与短期授权信息，而不是把照片或视频字节塞进 JSON。客户端先根据尺寸保留布局，优先请求低分辨率预览，再按屏幕与网络加载更高质量版本；视频可先拿封面和短首段。对象 URL 含不可变版本，适合长 TTL 的 CDN 缓存，帖子删除则通过授权元数据和短期 token 快速阻断新请求。这个分离让 Feed Service 的 p99 不受四 GB 视频传输影响，也能独立扩展元数据与边缘流量。",
+          "takeaway": "元数据决定展示，CDN 交付不可变媒体，两条链路各自预算延迟。"
+        },
+        {
+          "title": "关注流仍要面对名人与冷用户",
+          "body": "普通作者可在发帖后异步把 postId 写入粉丝的有限 feed 窗口，读取时只需批量取回帖子元数据；超大粉丝作者若照做会制造巨量写放大，应在请求时合并其最近帖子。长期不活跃用户没必要持续维护昂贵 feed，可以在回流时用 Follow 与近期 Post 重建窗口。混合策略的去重键是 postId，排序键是 createdAt 加 postId；阈值同时参考粉丝数、发帖频率、粉丝活跃率和扇出积压，不因“社交产品都预计算”而固定一种方案。",
+          "takeaway": "对普通、名人和冷用户采用不同物化策略，但保持同一排序契约。"
+        },
+        {
+          "title": "用首帧与破图率定位 500M DAU 的瓶颈",
+          "body": "Instagram 的容量问题不能只统计 Feed QPS。上传侧要看分片失败率、finalize 重试、对象存储写带宽和处理队列最老年龄；浏览侧看 Feed p99、图片首字节、视频首帧、CDN 命中与回源并发；正确性侧持续抽样 PUBLISHED Post 是否都能解析到 READY 媒体。热门帖子回源异常时先启用 origin shield 和请求合并，处理积压时降低非关键 rendition 优先级。任何扩容结论都要能指出是哪条资源曲线先饱和，而不是笼统归因于用户总数。区域流量失衡还要单独观察回源带宽与处理槽位。",
+          "takeaway": "将上传、处理、元数据读取和媒体交付分别观测，才能找到真实限速环节。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "如何防止帖子已经对粉丝可见，但它引用的视频仍在转码？",
+          "trigger": "候选人把上传成功直接等同于发布成功。",
+          "answer": "我会让 MediaVersion 拥有显式处理状态，并定义一组发布所必需的 rendition。处理任务输出不可变对象并回写校验结果，协调器确认必需集合齐全后才把版本从 PROCESSING 条件更新为 READY。CreatePost 事务必须验证 owner 与 READY 状态，成功后才产生 feed 事件。若客户端重复提交同一 publishKey，返回原 postId；任何失败版本只对作者显示诊断，不会进入粉丝 feed。",
+          "follow_up": "处理配置升级时，怎样切换到新 rendition 又不让旧帖子短暂破图？",
+          "common_miss": "依靠队列顺序猜测媒体已经完成，没有可查询状态和原子发布条件。",
+          "repair": "画 UploadSession、MediaVersion 与 Post 三个状态机，标出唯一可见性切换点。",
+          "sources": [
+            {
+              "source": "hi.breakdown.instagram",
+              "heading": "1) Users should be able to create posts featuring photos, videos, and a simple caption"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Workers"
+            }
+          ]
+        },
+        {
+          "question": "四 GB 上传在 95% 时断线，续传协议需要保存哪些证据？",
+          "trigger": "候选人只说 multipart，却无法判断哪些 part 可以信任。",
+          "answer": "UploadSession 持久化 uploadId、owner、对象键、partSize、已确认 partNumber 与各自 checksum；对象存储回执是服务端接受 part 的证据。重连后客户端查询清单，只补缺失或校验不符的 part，finalize 根据有序清单计算整体校验并以 uploadId 幂等。凭证限制对象前缀、part 范围和有效期，session 过期后不能继续写；清理器仅删除未被 READY MediaVersion 引用且超过宽限期的对象。所有恢复判断都以服务端与对象存储的回执为准。",
+          "follow_up": "客户端声称上传完成，但某一 part 在对象存储中缺失时返回什么状态？",
+          "common_miss": "只在客户端记进度，换设备或应用重装后无法可信恢复。",
+          "repair": "写出 create、uploadPart、listParts、complete 四个接口及幂等键。",
+          "sources": [
+            {
+              "source": "hi.breakdown.instagram",
+              "heading": "2) The system should render photos and videos instantly, supporting photos up to 8mb and videos up to 4GB"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Workers"
+            }
+          ]
+        },
+        {
+          "question": "为什么 Feed API 不应该代理图片和视频字节？",
+          "trigger": "候选人让应用服务承担媒体上传和下载，导致带宽耦合。",
+          "answer": "Feed Service 的职责是权限、排序和元数据，若它代理大对象，少数慢连接会占住工作线程与出站带宽，使元数据请求尾延迟跟媒体大小一起恶化。服务端应返回带版本的 manifest 和短期授权，客户端直接从 CDN 或对象存储取媒体；图片先取适配屏幕的变体，视频先取封面或首段。对象键不可变便于长缓存，删除权限通过短 token 与元数据检查控制。这样元数据扩容和媒体带宽扩容互不牵连。",
+          "follow_up": "私有账户的媒体怎样使用 CDN，又不把永久公开 URL 泄露出去？",
+          "common_miss": "认为使用 CDN 就自动解决授权、版本和删除传播。",
+          "repair": "把 Feed JSON、授权 token、CDN cache key 与对象键分别画出。",
+          "sources": [
+            {
+              "source": "hi.breakdown.instagram",
+              "heading": "2) The system should render photos and videos instantly, supporting photos up to 8mb and videos up to 4GB"
+            },
+            {
+              "source": "hi.pattern.scaling-reads",
+              "heading": "CDN and Edge Caching"
+            }
+          ]
+        },
+        {
+          "question": "名人发帖时，如何避免向数千万 feed 写入又保持首屏低延迟？",
+          "trigger": "候选人只会全量扇出或每次遍历全部关注者。",
+          "answer": "对超大粉丝作者保留 post 事实，不进入普通 fanout 队列；Feed Service 读取 viewer 的预计算窗口后，再批量拉取其关注的少量名人近期帖子，按 createdAt、postId 归并。普通作者继续 fanout-on-write，冷用户可在回流时重建。名人集合、每个来源候选数和归并总数都有上限，超时就返回预计算部分并允许刷新。阈值用写放大、名人关注数、读端 p99 与 feed 陈旧度共同调节。",
+          "follow_up": "一个普通作者突然爆红时，切换期间如何防止同一 postId 出现两次？",
+          "common_miss": "没有统一去重与排序键，混合两条路径后结果不稳定。",
+          "repair": "用一位刚跨阈值的作者演示双路径归并和 postId 去重。",
+          "sources": [
+            {
+              "source": "hi.breakdown.instagram",
+              "heading": "1) The system should deliver feed content with low latency (< 500ms )"
+            },
+            {
+              "source": "hi.breakdown.instagram",
+              "heading": "3) The system should be scalable to support 500M DAU"
+            }
+          ]
+        },
+        {
+          "question": "怎样证明媒体管线恢复后没有留下公开破图？",
+          "trigger": "候选人只关注 worker 成功率，没有从帖子引用反查对象。",
+          "answer": "我会周期抽样所有 PUBLISHED Post，解析其 manifestVersion，验证必需 rendition 的对象存在、checksum 匹配且授权元数据可用；这是面向用户结果的破图率。管线还记录每个 mediaVersion 的状态年龄、任务尝试与最后错误，超过预算进入可重放死信。恢复时只重跑缺失输出，成功后重新校验整个 manifest，再允许切换。孤儿对象扫描必须从 Post 和 READY MediaVersion 的引用集合反向确认，不能按年龄直接删掉仍在使用的内容。",
+          "follow_up": "如果校验发现某个热门帖的一个 rendition 丢失，如何降级而不下架整个帖子？",
+          "common_miss": "把队列清空当作恢复完成，未检查用户可见引用。",
+          "repair": "定义 manifest 完整性巡检、破图告警和单 rendition 回填步骤。",
+          "sources": [
+            {
+              "source": "hi.breakdown.instagram",
+              "heading": "3) The system should be scalable to support 500M DAU"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "失败后重建状态"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "youtube",
+      "title": "YouTube",
+      "source": "hi.breakdown.youtube",
+      "read": {
+        "headings": [
+          "Understand the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "The API",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 YouTube 端到端设计图：标出 视频上传、处理版本、清单与发布状态、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understand the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 可恢复上传如何完成校验并触发多码率转码 与 按网络条件快速取得 manifest 与视频分片并连续播放，每条箭头标明协议或数据。",
+          "明确 所有必需 rendition 校验通过后原子发布 manifestVersion，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 视频上传、处理版本、清单与发布状态，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we handle processing a video to support adaptive bitrate streaming?",
+          "2) How do we support resumable uploads?",
+          "3) How do we scale to a large number of videos uploaded / watched a day?",
+          "Some additional deep dives you might consider",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.youtube",
+        "deliverable": "提交 YouTube 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 3 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Workers",
+          "why": "编排多阶段视频处理。"
+        },
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "CDN and Edge Caching",
+          "why": "降低全球视频分片回源。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Handling Bursts with Queues and Load Shedding",
+          "why": "吸收上传后转码突发。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Entities, Keys & Relationships",
+          "why": "分离 upload session、video、rendition、manifest 与统计。"
+        },
+        {
+          "source": "hi.deep.kafka",
+          "heading": "Handling Retries and Errors",
+          "why": "设计转码任务的有限重试、死信与安全重放。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch11",
+          "heading": "工作流调度",
+          "why": "建模转码 DAG 与失败重试。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "保证 finalize 与转码安全重放。"
+        },
+        {
+          "source": "ddia.ch13",
+          "heading": "通过衍生数据组合专用工具",
+          "why": "理解清单、分片和统计的派生链。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "上传会话让大文件可恢复",
+          "body": "YouTube 上传从 createUpload 开始，服务端返回 uploadId、推荐 partSize 和受限对象前缀。客户端并行发送分片，每个 part 带序号与 checksum；服务端只在对象存储确认后记录完成。completeUpload 根据有序 part 清单验证总长度与内容哈希，同一 uploadId 重复 complete 只能返回同一 videoId。原始文件保持不可变，后续处理都引用其 contentHash。这个协议让浏览器断线、设备切网或服务重启后都能查询已完成分片，而不是从零开始传输数十 GB。过期会话进入宽限清理，只有确认没有 Video 引用后才删除原片。",
+          "takeaway": "持久 part 清单、校验和与幂等 complete 是断点续传的核心。"
+        },
+        {
+          "title": "转码不是一个任务，而是一张可重放 DAG",
+          "body": "原片进入处理管线后，先探测编码、时长和音轨，再切分时间段并生成多种分辨率与码率；音频、字幕和缩略图可形成并行分支。每个节点以 inputHash、pipelineVersion、segmentRange 和 rendition 组成输出键，重试不会产生不同结果。协调器记录依赖完成水位，单个 4K rendition 失败不会迫使已成功的 720p 全部重做。高优先级路径先产出最低可播放集合，让创作者尽早预览，完整质量随后补齐。任务运行时还应记录编码器版本，防止同一输出被不同二进制悄然改写。",
+          "takeaway": "显式依赖、内容寻址输出和局部重试把转码从黑盒变成可运营工作流。"
+        },
+        {
+          "title": "播放清单必须一次发布一个完整版本",
+          "body": "播放器不能拿到引用尚未存在分片的 manifest。处理协调器先在私有前缀生成全部必需 segment，逐一校验大小和 checksum，然后写 immutable manifest-v17；最后只更新 Video 元数据中的 publishedManifestVersion。读请求始终解析一个确定版本，即使新处理仍在进行也继续播放 v16。若 v17 监测到错误，只需把指针回退而不用失效数百万分片。清单短 TTL，媒体 segment 因带版本和内容哈希可长时间缓存，二者采用不同缓存策略。发布日志保存旧指针与验证摘要，便于事故后解释为何回退。",
+          "takeaway": "先构造完整不可变版本，再原子切换短小指针。"
+        },
+        {
+          "title": "自适应播放依赖可切换的同时间片",
+          "body": "各码率 rendition 必须使用对齐的 segment 边界和关键帧，播放器才能在片段之间无缝切换。开始播放时先获取较保守码率的首段，根据近期下载吞吐、缓冲区长度和设备能力选择下一片，而不是等待测速完成。服务端 manifest 描述每个 rendition 的带宽、分辨率与 segment URL；播放器遇到网络变差先降码率保住连续性，网络恢复再逐步升高。首帧时间、rebuffer ratio 和平均清晰度要一起看，单纯追求最高码率会恶化真实体验。",
+          "takeaway": "ABR 的目标是连续播放与画质的动态平衡，不是固定选择最高分辨率。"
+        },
+        {
+          "title": "爆款视频需要 origin shield 和分层缓存",
+          "body": "热门视频的同一批 segment 会在全球被重复请求，边缘 CDN 命中可消除大部分源站流量；但多个边缘同时 miss 仍可能冲垮对象存储。区域 origin shield 先合并回源，单 key 再做请求折叠，只让一个下载穿透。新发布的预计热门内容可预热首批 segment，却不必复制完整长视频。缓存键包含 manifestVersion 与内容哈希，因此不同版本不会串读；删除或权限变化由短期清单和授权层阻断，媒体对象可在后台按保留策略清理。",
+          "takeaway": "边缘、区域 shield、对象存储形成三级读路径，并用版本化 key 避免失效风暴。"
+        },
+        {
+          "title": "处理公平性与播放 SLO 要分开运营",
+          "body": "长视频会占据大量转码槽，若队列只按到达顺序，大文件可能拖慢所有短视频。调度器应按租户、视频长度、目标 rendition 和优先级分队列，给每类设置并发配额；重试任务进入独立预算，持续失败的输入送死信而非无限抢资源。处理侧看 upload-to-playable、各 DAG 节点 p99、最老任务和单位分钟算力；播放侧看 manifest 错误、首帧、缓冲、CDN 命中和源站带宽。两组指标分开，才能判断是后台制作慢还是前台交付差。",
+          "takeaway": "资源调度保证处理公平，播放指标直接反映观众体验。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "completeUpload 响应丢失后，客户端怎样避免生成第二个视频？",
+          "trigger": "候选人把 HTTP 重试当成新的上传完成动作。",
+          "answer": "客户端必须复用 uploadId 与同一个 completeKey。服务端在唯一约束下把 uploadId 映射到 videoId，并先核对对象存储中的 part 清单、长度和整体 checksum；映射已存在时直接返回原 videoId，不再次触发新管线。若部分 part 未确认，返回仍可查询的 INCOMPLETE 和缺失列表。处理事件由持久 outbox 产生，即使响应丢失也会继续，客户端查询 video 状态即可判断结果。",
+          "follow_up": "对象存储 complete 成功、本地映射事务失败时怎样恢复？",
+          "common_miss": "只给每个 part 幂等，却让最终 complete 重复创建业务实体。",
+          "repair": "为 uploadId 到 videoId 建唯一映射，并演练 complete 的三个崩溃点。",
+          "sources": [
+            {
+              "source": "hi.breakdown.youtube",
+              "heading": "2) How do we support resumable uploads?"
+            },
+            {
+              "source": "hi.breakdown.youtube",
+              "heading": "1) Users can upload videos"
+            }
+          ]
+        },
+        {
+          "question": "怎样把一个两小时视频转成多码率，又避免失败后全量重做？",
+          "trigger": "候选人只有一个笼统 transcoder 服务，没有任务边界。",
+          "answer": "先 probe 原片并固定 pipelineVersion，再按时间范围切 segment；每个 rendition、segmentRange 是独立任务，输出键带 inputHash 和配置版本。协调器维护 DAG 依赖，音频与不同分辨率可并行，失败仅重试缺失节点。最低可播放集合完成后可以进入 READY_PREVIEW，正式发布仍需 manifest 所要求的全套输出校验。死信保存原始参数和错误分类，修复 worker 后可精确重放，不覆盖已验证结果。",
+          "follow_up": "不同码率的 segment 边界为什么必须对齐？",
+          "common_miss": "把并行转码说成多个重复整片任务，成本和恢复粒度都不可控。",
+          "repair": "画 probe、segment、encode、package、publish 五层 DAG，并标出幂等输出键。",
+          "sources": [
+            {
+              "source": "hi.breakdown.youtube",
+              "heading": "1) How can we handle processing a video to support adaptive bitrate streaming?"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Workers"
+            }
+          ]
+        },
+        {
+          "question": "为什么不能边转码边修改同一个播放 manifest？",
+          "trigger": "候选人让播放器可能读到半成品清单。",
+          "answer": "原地更新会让缓存和播放器在不同时间看到不完整集合：清单已经列出 segment，但对象尚未可读，或不同码率的时间片未对齐。我会为每次管线结果生成 immutable manifestVersion，先验证它引用的必需对象，再用一次条件写更新 Video.publishedManifestVersion。播放器一次会话固定读取该版本，清单短 TTL，segment 长 TTL。新版本异常时回退指针即可，旧对象保留到会话和缓存窗口结束。",
+          "follow_up": "跨区域复制尚未完成时，published 指针何时可以切换？",
+          "common_miss": "认为对象存储单对象原子写就足以保证多个 segment 的集合原子性。",
+          "repair": "列出 v16 到 v17 的准备、验证、切换和回滚四步。",
+          "sources": [
+            {
+              "source": "hi.breakdown.youtube",
+              "heading": "1) How can we handle processing a video to support adaptive bitrate streaming?"
+            },
+            {
+              "source": "ddia.ch11",
+              "heading": "工作流调度"
+            }
+          ]
+        },
+        {
+          "question": "一个视频突然获得一亿播放，最先保护哪条路径？",
+          "trigger": "候选人只说增加 CDN，却未处理并发 miss 与元数据热点。",
+          "answer": "首先把不可变 segment 放到边缘缓存，并在区域设置 origin shield；同一 segment 的并发 miss 在 shield 做请求折叠，避免所有边缘直打对象存储。manifest 和视频元数据是较小但更易热的键，可做多副本缓存，键中带 publishedManifestVersion。只预热首批高概率播放片段，避免为长视频搬运大量无人观看尾段。监控 edge/shield 命中、单 segment 回源并发、对象存储带宽和首帧，超过阈值再扩区域缓存容量。",
+          "follow_up": "视频被设为私有后，已缓存 segment 如何阻止继续访问？",
+          "common_miss": "把 CDN 当作无限容量，忽略 origin shield、授权和冷热片段差异。",
+          "repair": "画 edge miss 到 shield 再到 origin 的时序，并给每层写限流与命中指标。",
+          "sources": [
+            {
+              "source": "hi.breakdown.youtube",
+              "heading": "3) How do we scale to a large number of videos uploaded / watched a day?"
+            },
+            {
+              "source": "hi.pattern.scaling-reads",
+              "heading": "CDN and Edge Caching"
+            }
+          ]
+        },
+        {
+          "question": "转码队列积压时，如何决定降级而不是无限扩容？",
+          "trigger": "候选人没有任务优先级、成本或用户可见目标。",
+          "answer": "我会按 upload-to-playable SLO 排序，而不是要求所有 rendition 同时完成。先保证音频、封面和一组基础码率，暂停昂贵的高分辨率增强；长视频、批量上传与重试流量使用独立配额，避免占满交互上传。看最老任务年龄、每分钟视频的算力成本、各节点失败类型和可播放完成率。扩容前先确认瓶颈是 CPU 编码、对象读写还是队列分区；降级结束后补跑被延迟的 rendition，并重新验证 manifest。",
+          "follow_up": "如何避免一个大客户的批量上传饿死普通创作者？",
+          "common_miss": "用队列长度单指标扩容，未区分任务大小和最低可播放目标。",
+          "repair": "为短视频、长视频、高分辨率和重试任务设计四个配额队列。",
+          "sources": [
+            {
+              "source": "hi.breakdown.youtube",
+              "heading": "3) How do we scale to a large number of videos uploaded / watched a day?"
+            },
+            {
+              "source": "hi.deep.kafka",
+              "heading": "Handling Retries and Errors"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

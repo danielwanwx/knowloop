@@ -1,0 +1,85 @@
+{
+  "title": "Ticketmaster Booking Path",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "architecture",
+  "summary": "Ticketmaster 的核心不是展示活动，而是高并发下公平放行并避免同一座位被卖两次。",
+  "task": "设计抢票系统的关键路径：浏览、排队、锁座、支付、确认。",
+  "constraints": [
+    "浏览活动可以可用性优先，锁座和下单必须一致性优先",
+    "热门活动会瞬时放大流量，需要等待室和限流",
+    "支付是外部依赖，必须处理超时、幂等和补偿"
+  ],
+  "blocks": [
+    {
+      "id": "user",
+      "lane": "top",
+      "kind": "client",
+      "shape": "circle",
+      "title": "Fan",
+      "body": "web/mobile buyers; retry on failure."
+    },
+    {
+      "id": "edge",
+      "lane": "top",
+      "kind": "api",
+      "title": "API Gateway 防护入口",
+      "body": "入口层要做鉴权、限流和 idempotency key。重复点击或客户端重试不能变成重复下单。"
+    },
+    {
+      "id": "waiting",
+      "lane": "middle",
+      "kind": "queue",
+      "title": "等待室削峰放行",
+      "body": "热门活动不能把所有请求直接打到库存服务。等待室负责公平放行，并把峰值流量削平，让后端按可承受速率处理。"
+    },
+    {
+      "id": "booking",
+      "lane": "middle",
+      "kind": "service",
+      "title": "Booking service 管理锁座生命周期",
+      "body": "它先创建有过期时间的 seat hold，再生成 booking。支付失败或超时后，hold 必须释放。"
+    },
+    {
+      "id": "payment",
+      "lane": "middle",
+      "kind": "service",
+      "title": "支付是外部不可靠依赖",
+      "body": "支付会超时、失败或重复回调。这里要用幂等请求和补偿逻辑，而不是假设同步调用总成功。"
+    },
+    {
+      "id": "inventory",
+      "lane": "bottom",
+      "kind": "database",
+      "title": "座位库存强一致",
+      "body": "同一个座位只能有一个有效 hold。条件写、事务或强一致存储用于避免 double booking。"
+    },
+    {
+      "id": "cache",
+      "lane": "bottom",
+      "kind": "cache",
+      "title": "活动缓存服务浏览流量",
+      "body": "活动详情和可售状态可以接受短暂不新鲜。浏览路径偏 AP，购买路径才进入强一致库存。"
+    }
+  ],
+  "connectors": [
+    {"from": "user", "to": "edge", "label": "browse / buy", "routing": "horizontal", "label_dx": 60, "label_dy": -26},
+    {"from": "edge", "to": "waiting", "label": "hot event", "routing": "vertical", "label_dx": -80, "label_dy": -12},
+    {"from": "waiting", "to": "booking", "label": "admit", "routing": "horizontal"},
+    {"from": "booking", "to": "inventory", "label": "conditional hold", "routing": "vertical", "label_dy": -18},
+    {"from": "booking", "to": "payment", "label": "charge", "routing": "horizontal", "label_dy": -30},
+    {
+      "from": "edge",
+      "to": "cache",
+      "label": "cache read",
+      "points": [[910, 863], [910, 920], [510, 920], [510, 1245], [1108, 1245], [1108, 1298]]
+    }
+  ],
+  "callouts": [
+    {
+      "title": "读写路径分离",
+      "body": "活动浏览走 cache 和可用性优先路径；座位 hold 与 booking 走强一致库存路径，避免 double booking。"
+    }
+  ],
+  "talk_track": "这个设计我会先拆成浏览和购买两条路径。浏览活动详情可以走缓存和最终一致；真正锁座时必须走强一致库存，用条件写或事务保证一个座位只有一个有效 hold。热门活动前面加 waiting room 和限流，支付用幂等 key，失败时释放 hold。"
+}

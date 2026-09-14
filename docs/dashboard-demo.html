@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>KnowLoop · 私人学习看板</title>
+    <style>
+      :root {
+        --paper: #f6f5f0;
+        --ink: #172d30;
+        --muted: #617271;
+        --line: #dce3df;
+        --teal: #086b62;
+        --warm: #ad5a32;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          15px/1.65 system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      main {
+        max-width: 1200px;
+        margin: auto;
+        padding: 32px 28px 64px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 22px;
+      }
+      .brand {
+        font-size: 23px;
+        font-weight: 800;
+        letter-spacing: -1px;
+      }
+      .brand i {
+        color: var(--teal);
+        font-style: normal;
+      }
+      small,
+      .muted {
+        color: var(--muted);
+      }
+      h1 {
+        font-size: clamp(30px, 4vw, 48px);
+        letter-spacing: -1.5px;
+        line-height: 1.2;
+        margin: 28px 0 12px;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 0 0 14px;
+      }
+      h3 {
+        font-size: 16px;
+        margin: 0 0 8px;
+      }
+      .eyebrow {
+        letter-spacing: 2px;
+        font-size: 11px;
+        text-transform: uppercase;
+        color: var(--teal);
+        font-weight: 700;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: 30px;
+        margin: 30px 0;
+      }
+      .panel {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 24px;
+        min-width: 0;
+      }
+      .today {
+        background: var(--ink);
+        color: white;
+      }
+      .today .muted {
+        color: #bfd2cc;
+      }
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin: 22px 0;
+      }
+      .kpi b {
+        display: block;
+        font-size: 31px;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -1px;
+      }
+      .kpi small {
+        display: block;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+      }
+      .filters {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin: 24px 0 12px;
+      }
+      label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      select {
+        display: block;
+        background: #fff;
+        color: var(--ink);
+        border: 1px solid #a5b7ad;
+        border-radius: 8px;
+        padding: 9px;
+        max-width: 100%;
+        font: inherit;
+      }
+      select:focus-visible,
+      summary:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #c98942;
+        outline-offset: 3px;
+      }
+      ul {
+        padding-left: 20px;
+      }
+      li {
+        margin: 8px 0;
+      }
+      a {
+        color: var(--teal);
+      }
+      code {
+        background: #eaf0eb;
+        border-radius: 5px;
+        padding: 3px 6px;
+        color: #185a52;
+      }
+      svg {
+        width: 100%;
+        max-height: 320px;
+        overflow: visible;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 9px 5px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .table-wrap {
+        overflow: auto;
+      }
+      details {
+        border-top: 1px solid var(--line);
+        padding: 12px 0;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .pill {
+        display: inline-block;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 2px 9px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .empty {
+        padding: 30px 0;
+        color: var(--muted);
+      }
+      .task {
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+      }
+      .task strong {
+        display: block;
+      }
+      .warn {
+        color: var(--warm);
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font: inherit;
+        background: var(--paper);
+        padding: 12px;
+        border-radius: 8px;
+      }
+      .footer {
+        margin-top: 28px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      progress {
+        accent-color: var(--teal);
+        width: 100%;
+        height: 9px;
+      }
+      .demo {
+        background: #fbe6c8;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        margin-top: 20px;
+      }
+      @media (max-width: 720px) {
+        main {
+          padding: 20px 16px;
+        }
+        .hero,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .kpis {
+          grid-template-columns: 1fr 1fr;
+        }
+        .panel {
+          padding: 18px;
+        }
+        header {
+          align-items: flex-start;
+          gap: 14px;
+        }
+        .filters > label {
+          width: 100%;
+        }
+        select {
+          width: 100%;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">
+          Know<i>Loop</i><span class="pill">PRIVATE / 本地记录</span>
+        </div>
+        <small id="saved"></small>
+      </header>
+      <div id="demo"></div>
+      <section class="hero">
+        <div>
+          <div class="eyebrow">Your learning, with evidence</div>
+          <h1>知道自己会什么，<br />也知道下一步练什么。</h1>
+          <p class="muted">
+            学过、答对、独立做到、过几天仍能做到，是四件不同的事。
+          </p>
+          <p id="course-name"></p>
+          <p><code>coach，今天学什么？</code> <code>coach，继续上次</code></p>
+        </div>
+        <div class="panel today">
+          <h2>今天，先把这件事做扎实。</h2>
+          <div id="today"></div>
+        </div>
+      </section>
+      <div class="kpis" id="kpis"></div>
+      <div class="filters">
+        <label>科目<select id="track"></select></label
+        ><label
+          >具体能力（雷达与趋势按此对比）<select
+            id="competency"
+          ></select></label
+        ><label
+          >观察范围<select id="range">
+            <option value="all">全部记录</option>
+            <option value="30">最近 30 天</option>
+            <option value="7">最近 7 天</option>
+          </select></label
+        >
+      </div>
+      <p class="muted" id="scope"></p>
+      <div class="grid">
+        <section class="panel">
+          <div class="eyebrow">01 / Capability</div>
+          <h2>八维能力 · 有证据才出分</h2>
+          <div id="radar"></div>
+          <div class="table-wrap" id="radar-table"></div>
+        </section>
+        <section class="panel">
+          <div class="eyebrow">02 / Observed performance</div>
+          <h2>表现轨迹</h2>
+          <label>同一量表维度<select id="dimension"></select></label>
+          <div id="trend"></div>
+          <p class="muted">
+            实心点：无提示；空心点：有帮助。只画实际观测，不补齐空白日期。
+          </p>
+        </section>
+      </div>
+      <div class="grid">
+        <section class="panel">
+          <div class="eyebrow">03 / Remember after a delay</div>
+          <h2>过几天，还能自己答出来吗？</h2>
+          <div id="retention"></div>
+        </section>
+        <section class="panel">
+          <div class="eyebrow">04 / Your next repair</div>
+          <h2>优先补的三个缺口</h2>
+          <div id="gaps"></div>
+        </section>
+      </div>
+      <div class="grid">
+        <section class="panel">
+          <h2>课程进度与覆盖</h2>
+          <div id="tasks"></div>
+        </section>
+        <section class="panel">
+          <h2>回到实际回答</h2>
+          <div id="evidence"></div>
+        </section>
+      </div>
+      <div class="grid">
+        <section class="panel">
+          <div class="eyebrow">Study library</div>
+          <h2>已确认要点与面试口述稿</h2>
+          <div id="sections"></div>
+        </section>
+        <section class="panel">
+          <div class="eyebrow">Personal gap ledger</div>
+          <h2>最近完整复盘</h2>
+          <div id="debriefs"></div>
+          <h2>错题、破绽与标准修复</h2>
+          <div id="gap-ledger"></div>
+        </section>
+      </div>
+      <p class="footer">
+        AI 依据已收到的作答进行评估；不是招聘通过率或精确掌握百分比。0 关键错误
+        · 1 帮助下部分完成 · 2 独立达到目标 · 3
+        更复杂新条件下独立完成。未测不记零。本页只读；保存练习后重新生成，重新打开或刷新即可查看。无账号、无遥测、无远端脚本。
+      </p>
+    </main>
+    <script type="application/json" id="coach-data">
+      {"demo": true, "generated_at": "2026-09-13T12:00:00Z", "enrollment": {"course_id": "demo-coding", "week_id": "w1", "minutes": 30, "timezone": "UTC"}, "course": {"course_id": "demo-coding", "title": "Synthetic coding demonstration", "version": "demo-1", "updated_at": "2026-09-13", "note": "Explicitly synthetic data for the public dashboard preview.", "source_urls": ["https://example.com/knowloop-demo"], "weeks": [{"week_id": "w1", "label": "Synthetic Week 1", "status": "available", "date_window": null, "tasks": [{"task_id": "demo-sliding-window", "title": "Synthetic sliding-window exercise", "track": "Coding", "source_url": "https://example.com/knowloop-demo", "minutes": 20, "prerequisites": ["Synthetic prerequisite"], "outcome": "Synthetic outcome for the public preview.", "acceptance": ["Synthetic acceptance check"], "provenance": "coach_suggestion"}]}]}, "task_states": {"demo-sliding-window": {"status": "in_progress", "source": "evidence"}}, "plan": {"date": "2026-09-13", "minutes": 30, "items": [{"title": "Synthetic invariant review", "minutes": 10, "reason": "Synthetic demo review", "slice": false}, {"title": "Synthetic sliding-window exercise", "minutes": 20, "reason": "Synthetic demo task", "slice": true}], "unavailable": false}, "records": [{"event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "track": "Coding", "competency": "Sliding-window invariant", "mode": "Practice", "received": {"transcript": "Synthetic learner answer.", "original_answer": "Maintain the counts in the current fixed-size window.", "hints": "What changes when the left boundary moves?"}, "context": {"course_id": "demo-coding", "task_id": "demo-sliding-window", "next_action": "Explain what happens when a character leaves the window."}, "evaluation": {"evidence_type": "prompted", "scope": "complete", "state": "needs_hint", "dimensions": {"mechanism": "Synthetic demonstration only."}, "attempt_outcome": "not_met", "rubric_scores": {"rubric_version": "knowloop-1", "dimensions": {"concepts": {"score": 1, "reason": "Synthetic example: needed a hint"}, "causality": {"score": 1, "reason": "Synthetic example: needed a hint"}, "application": {"score": 1, "reason": "Synthetic example: needed a hint"}, "edges": {"score": 1, "reason": "Synthetic example: needed a hint"}, "tradeoffs": {"score": 1, "reason": "Synthetic example: needed a hint"}, "structure": {"score": 1, "reason": "Synthetic example: needed a hint"}, "expression": {"score": 1, "reason": "Synthetic example: needed a hint"}}}}}, {"event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "track": "Coding", "competency": "Sliding-window invariant", "mode": "Practice", "received": {"transcript": "Synthetic learner answer.", "original_answer": "Maintain the counts in the current fixed-size window.", "hints": ""}, "context": {"course_id": "demo-coding", "task_id": "demo-sliding-window", "next_action": "Explain what happens when a character leaves the window."}, "evaluation": {"evidence_type": "independent", "scope": "complete", "state": "independent_today", "dimensions": {"mechanism": "Synthetic demonstration only."}, "attempt_outcome": "met", "rubric_scores": {"rubric_version": "knowloop-1", "dimensions": {"concepts": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "causality": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "application": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "edges": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "tradeoffs": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "structure": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "expression": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}}}}}, {"event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "track": "Coding", "competency": "Sliding-window invariant", "mode": "Practice", "received": {"transcript": "Synthetic learner answer.", "original_answer": "Maintain the counts in the current fixed-size window.", "hints": ""}, "context": {"course_id": "demo-coding", "task_id": "demo-sliding-window", "next_action": "Explain what happens when a character leaves the window."}, "evaluation": {"evidence_type": "independent", "scope": "complete", "state": "independent_today", "dimensions": {"mechanism": "Synthetic demonstration only."}, "attempt_outcome": "met", "rubric_scores": {"rubric_version": "knowloop-1", "dimensions": {"concepts": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "causality": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "application": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "edges": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "tradeoffs": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "structure": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "expression": {"score": 2, "reason": "Synthetic example: explained the invariant independently"}, "retention": {"score": 2, "reason": "Synthetic delayed retest after four days."}}}, "retest_of": "demo-1"}}], "repairs": [{"target": "Explain the synthetic outgoing-character update", "track": "Coding", "competency": "Sliding-window invariant", "due_at": "2026-09-14T12:00:00Z", "event_id": "demo-0"}], "dimensions": {"concepts": "概念理解", "causality": "因果解释", "application": "独立应用", "edges": "边界与测试", "tradeoffs": "权衡与迁移", "structure": "回答结构", "expression": "表达清晰度", "retention": "延迟保持"}, "analytics": [{"track": "", "competency": "", "period": "all", "stats": {"sample_count": 3, "incomplete": 0, "independent": {"met": 2, "total": 2, "unscored": 0}, "hints": {"count": 1, "total": 3}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "", "competency": "", "period": "30", "stats": {"sample_count": 3, "incomplete": 0, "independent": {"met": 2, "total": 2, "unscored": 0}, "hints": {"count": 1, "total": 3}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "", "competency": "", "period": "7", "stats": {"sample_count": 1, "incomplete": 0, "independent": {"met": 1, "total": 1, "unscored": 0}, "hints": {"count": 0, "total": 1}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "", "competency": "Sliding-window invariant", "period": "all", "stats": {"sample_count": 3, "incomplete": 0, "independent": {"met": 2, "total": 2, "unscored": 0}, "hints": {"count": 1, "total": 3}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "", "competency": "Sliding-window invariant", "period": "30", "stats": {"sample_count": 3, "incomplete": 0, "independent": {"met": 2, "total": 2, "unscored": 0}, "hints": {"count": 1, "total": 3}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "", "competency": "Sliding-window invariant", "period": "7", "stats": {"sample_count": 1, "incomplete": 0, "independent": {"met": 1, "total": 1, "unscored": 0}, "hints": {"count": 0, "total": 1}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "Coding", "competency": "", "period": "all", "stats": {"sample_count": 3, "incomplete": 0, "independent": {"met": 2, "total": 2, "unscored": 0}, "hints": {"count": 1, "total": 3}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "Coding", "competency": "", "period": "30", "stats": {"sample_count": 3, "incomplete": 0, "independent": {"met": 2, "total": 2, "unscored": 0}, "hints": {"count": 1, "total": 3}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "Coding", "competency": "", "period": "7", "stats": {"sample_count": 1, "incomplete": 0, "independent": {"met": 1, "total": 1, "unscored": 0}, "hints": {"count": 0, "total": 1}, "retention": {"met": 1, "total": 1}, "radar": {}, "trend": [{"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "Coding", "competency": "Sliding-window invariant", "period": "all", "stats": {"sample_count": 3, "incomplete": 0, "independent": {"met": 2, "total": 2, "unscored": 0}, "hints": {"count": 1, "total": 3}, "retention": {"met": 1, "total": 1}, "radar": {"concepts": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "count": 3}, "causality": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "count": 3}, "application": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "count": 3}, "edges": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "count": 3}, "tradeoffs": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "count": 3}, "structure": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "count": 3}, "expression": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "count": 3}, "retention": {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "count": 1}}, "trend": [{"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "Coding", "competency": "Sliding-window invariant", "period": "30", "stats": {"sample_count": 3, "incomplete": 0, "independent": {"met": 2, "total": 2, "unscored": 0}, "hints": {"count": 1, "total": 3}, "retention": {"met": 1, "total": 1}, "radar": {"concepts": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "count": 3}, "causality": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "count": 3}, "application": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "count": 3}, "edges": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "count": 3}, "tradeoffs": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "count": 3}, "structure": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "count": 3}, "expression": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "count": 3}, "retention": {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "count": 1}}, "trend": [{"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 1, "reason": "Synthetic example: needed a hint", "event_id": "demo-0", "occurred_at": "2026-09-01T12:00:00Z", "helped": true, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-1", "occurred_at": "2026-09-03T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}, {"track": "Coding", "competency": "Sliding-window invariant", "period": "7", "stats": {"sample_count": 1, "incomplete": 0, "independent": {"met": 1, "total": 1, "unscored": 0}, "hints": {"count": 0, "total": 1}, "retention": {"met": 1, "total": 1}, "radar": {"concepts": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "count": 1}, "causality": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "count": 1}, "application": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "count": 1}, "edges": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "count": 1}, "tradeoffs": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "count": 1}, "structure": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "count": 1}, "expression": {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "count": 1}, "retention": {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "count": 1}}, "trend": [{"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "concepts", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "causality", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "application", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "edges", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "tradeoffs", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "structure", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic example: explained the invariant independently", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "expression", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}, {"score": 2, "reason": "Synthetic delayed retest after four days.", "event_id": "demo-2", "occurred_at": "2026-09-07T12:00:00Z", "helped": false, "dimension": "retention", "track": "Coding", "competency": "Sliding-window invariant", "rubric_version": "knowloop-1"}], "retests": [{"event_id": "demo-2", "track": "Coding", "competency": "Sliding-window invariant", "days": 4.0, "met": true, "helped": false}]}}]}
+    </script>
+    <script>
+      "use strict";
+      const D = JSON.parse(document.getElementById("coach-data").textContent),
+        $ = (id) => document.getElementById(id),
+        esc = (s) =>
+          String(s ?? "").replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c],
+          );
+      D.study_sections ||= [];
+      D.open_gaps ||= [];
+      D.debriefs ||= [];
+      const attempted = (p) =>
+        ["independent", "prompted"].includes(p.evaluation.evidence_type);
+      const ratio = (n, d) => (d ? `${n} / ${d}` : "未评估"),
+        date = (s) => new Date(s).toLocaleDateString("zh-CN"),
+        empty = (s) => `<p class="empty">${esc(s)}</p>`,
+        options = (xs) =>
+          xs
+            .map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`)
+            .join("");
+      $("saved").textContent =
+        "报告生成于 " + new Date(D.generated_at).toLocaleString("zh-CN");
+      if (D.demo)
+        $("demo").innerHTML =
+          '<div class="demo">演示数据 · 以下全部是合成练习记录，不是任何用户的成绩。</div>';
+      $("course-name").textContent = D.course
+        ? D.course.title +
+          " · " +
+          D.enrollment.week_id +
+          " · 资料 " +
+          D.course.updated_at
+        : "尚未选择课程。告诉 coach 课程、起始周和今天可用时间即可。";
+      $("today").innerHTML = D.plan
+        ? `<p class="muted">${esc(D.plan.date)} · ${D.plan.minutes} 分钟预算（历史计划按日期保留）</p>` +
+          D.plan.items
+            .map(
+              (t) =>
+                `<div class="task"><strong>${esc(t.title)}</strong><span>${t.minutes} 分钟${t.slice ? " · 分段练习" : ""}</span><p class="muted">${esc(t.reason)}</p></div>`,
+            )
+            .join("") +
+          (D.plan.unavailable
+            ? "<p>本周正式作业尚未取得。可请 coach 安排明确标注的补充练习。</p>"
+            : "") +
+          (D.plan.items.length
+            ? ""
+            : "<p>本周暂无待安排任务；请 coach 复习或选择下一周。</p>")
+        : '<p>说“coach，帮我安排今天的学习计划”。</p><p class="muted">计划结合可用时间、课程任务与到期复测。</p>';
+      $("track").innerHTML = options([
+        ["", "所有科目"],
+        ...[...new Set(D.records.map((p) => p.track))]
+          .sort()
+          .map((v) => [v, v]),
+      ]);
+      $("dimension").innerHTML = options(Object.entries(D.dimensions));
+      function competencies() {
+        let track = $("track").value;
+        $("competency").innerHTML = options([
+          ["", "选择具体能力"],
+          ...[
+            ...new Set(
+              D.records
+                .filter((p) => !track || p.track === track)
+                .map((p) => p.competency),
+            ),
+          ]
+            .sort()
+            .map((v) => [v, v]),
+        ]);
+      }
+      function selected() {
+        const cut =
+          $("range").value === "all"
+            ? 0
+            : Date.parse(D.generated_at) - Number($("range").value) * 86400000;
+        return D.records.filter(
+          (p) =>
+            (!$("track").value || p.track === $("track").value) &&
+            (!$("competency").value ||
+              p.competency === $("competency").value) &&
+            Date.parse(p.occurred_at) >= cut,
+        );
+      }
+      function table(headers, rows) {
+        return `<table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => "<tr>" + r.map((x) => `<td>${esc(x)}</td>`).join("") + "</tr>").join("")}</tbody></table>`;
+      }
+      function scatter(points, retention = false) {
+        if (!points.length)
+          return empty(
+            retention ? "尚无可评估的延迟复测。" : "尚无此范围的数值观测。",
+          );
+        let min = Math.min(...points.map((p) => p.x)),
+          max = Math.max(...points.map((p) => p.x));
+        const x = (v) =>
+            45 + (max === min ? 165 : ((v - min) / (max - min)) * 330),
+          y = (v) => 180 - (v / (retention ? 1 : 3)) * 140;
+        return `<svg viewBox="0 0 420 220" role="img" aria-label="${retention ? "实际延迟天数与达标结果" : "实际观测点；详细数值见下表"}"><path d="M45 25V180H390" fill="none" stroke="#a5b7ad"/>${[0, 1, ...(retention ? [] : [2, 3])].map((v) => `<text x="20" y="${y(v) + 4}" font-size="12" fill="#617271">${v}</text>`).join("")}${points.map((p) => `<circle cx="${x(p.x)}" cy="${y(p.y)}" r="5" stroke="${p.helped ? "#ad5a32" : "#086b62"}" fill="${p.helped ? "white" : "#086b62"}"><title>${esc(p.label)}</title></circle>`).join("")}<text x="45" y="208" font-size="11">${esc(retention ? min + " 天" : date(min))}</text><text x="310" y="208" font-size="11">${esc(retention ? max + " 天" : date(max))}</text></svg>`;
+      }
+      function update() {
+        const rows = selected(),
+          M = D.analytics.find(
+            (a) =>
+              a.track === $("track").value &&
+              a.competency === $("competency").value &&
+              a.period === $("range").value,
+          ).stats,
+          allTasks = D.course ? D.course.weeks.flatMap((w) => w.tasks) : [],
+          completed = allTasks.filter(
+            (t) => D.task_states[t.task_id]?.status === "completed",
+          );
+        const pending = D.repairs.filter(
+          (r) => Date.parse(r.due_at) <= Date.parse(D.generated_at),
+        );
+        $("kpis").innerHTML = [
+          [
+            "课程任务完成",
+            ratio(completed.length, allTasks.length),
+            "全部课程 · 完成不等于掌握",
+          ],
+          [
+            "独立达标",
+            ratio(M.independent.met, M.independent.total),
+            "当前筛选 · 排除未评分尝试",
+          ],
+          ["到期复测", String(pending.length), "全部科目 · 不会一次塞进今天"],
+          ["实际尝试", String(M.sample_count), "当前筛选 · 含未完成尝试"],
+        ]
+          .map(
+            ([t, v, n]) =>
+              `<div class="panel kpi"><small>${t}</small><b>${v}</b><small>${n}</small></div>`,
+          )
+          .join("");
+        $("scope").textContent =
+          `当前筛选：提示依赖 ${ratio(M.hints.count, M.hints.total)}；未完成尝试 ${M.incomplete}；无明确结果的完整无提示尝试 ${M.independent.unscored}。`;
+        let latest = M.radar;
+        const scoped = $("track").value && $("competency").value;
+        const axes = Object.keys(D.dimensions),
+          position = (i, r) => [
+            210 + Math.sin((i * Math.PI) / 4) * r,
+            160 - Math.cos((i * Math.PI) / 4) * r,
+          ];
+        if (!scoped) {
+          $("radar").innerHTML = empty(
+            "先选择一个科目和具体能力，避免把不同题型混成一个总分。",
+          );
+          $("radar-table").innerHTML = "";
+        } else {
+          let lines = axes
+            .map((k, i) => {
+              let [x, y] = position(i, 95),
+                [tx, ty] = position(i, 126);
+              return `<line x1="210" y1="160" x2="${x}" y2="${y}" stroke="#dce3df"/><text x="${tx}" y="${ty}" text-anchor="middle" font-size="11" fill="#617271">${esc(D.dimensions[k])}</text>`;
+            })
+            .join("");
+          let dots = axes
+            .filter((k) => latest[k])
+            .map((k) => {
+              let v = latest[k],
+                [x, y] = position(axes.indexOf(k), (v.score / 3) * 95);
+              return `<circle cx="${x}" cy="${y}" r="5" fill="#086b62"><title>${esc(D.dimensions[k] + ": " + v.score + " · " + v.reason)}</title></circle>`;
+            })
+            .join("");
+          let polygon = axes.every((k) => latest[k])
+            ? `<polygon points="${axes.map((k, i) => position(i, (latest[k].score / 3) * 95).join(",")).join(" ")}" fill="#086b6218" stroke="#086b62"/>`
+            : "";
+          $("radar").innerHTML =
+            `<svg viewBox="0 0 420 320" role="img" aria-label="八维最新观测，缺失维度留空；详情见表格">${[1, 2, 3].map((v) => `<polygon points="${axes.map((k, i) => position(i, (v / 3) * 95).join(",")).join(" ")}" fill="none" stroke="#dce3df"/>`).join("")}${lines}${polygon}${dots}</svg>`;
+          $("radar-table").innerHTML = table(
+            ["维度", "最新评分", "观测次数 / 日期"],
+            axes.map((k) => [
+              D.dimensions[k],
+              latest[k] ? latest[k].score + " / 3" : "未评估",
+              latest[k]
+                ? latest[k].count + " / " + date(latest[k].occurred_at)
+                : "—",
+            ]),
+          );
+        }
+        let dim = $("dimension").value,
+          points = M.trend
+            .filter((p) => p.dimension === dim)
+            .map((p) => ({
+              x: Date.parse(p.occurred_at),
+              y: p.score,
+              helped: p.helped,
+              label: p.event_id + " · " + p.reason,
+            }));
+        $("trend").innerHTML = scoped
+          ? scatter(points) +
+            table(
+              ["日期", "分数", "帮助"],
+              points.map((p) => [date(p.x), p.y, p.helped ? "有" : "无"]),
+            )
+          : empty("选择具体科目和能力后查看可比观测。");
+        let ret = M.retests.map((p) => ({
+          x: p.days,
+          y: p.met ? 1 : 0,
+          helped: p.helped,
+          label: p.competency + " · " + p.event_id,
+        }));
+        $("retention").innerHTML =
+          `<p>无提示达标 ${ratio(M.retention.met, M.retention.total)} <span class="pill">真实复测，不预测遗忘率</span></p>` +
+          scatter(ret, true) +
+          (ret.length
+            ? table(
+                ["实际间隔", "结果", "能力 / 证据"],
+                ret.map((p) => [
+                  p.x + " 天",
+                  p.y ? "无提示达标" : p.helped ? "有帮助" : "未达标",
+                  p.label,
+                ]),
+              )
+            : "");
+        const gaps = D.repairs
+          .filter(
+            (r) =>
+              (!$("track").value || r.track === $("track").value) &&
+              (!$("competency").value ||
+                r.competency === $("competency").value),
+          )
+          .slice(0, 3);
+        $("gaps").innerHTML = gaps.length
+          ? gaps
+              .map((r) => {
+                const p = D.records.find((p) => p.event_id === r.event_id);
+                return `<div class="task"><strong>${esc(r.target)}</strong><small>${esc(r.track)} · ${esc(r.competency)} · ${date(r.due_at)}</small><p>${esc(p?.context.next_action || "请 coach 用一个未见过的等价问题复测。")}</p></div>`;
+              })
+              .join("")
+          : empty("尚无已记录的待修复目标；这不代表所有能力均已掌握。");
+        let observed = new Set(
+          D.records
+            .filter(attempted)
+            .filter((p) => p.context.course_id === D.course?.course_id)
+            .map((p) => p.context.task_id),
+        );
+        let states = {
+          not_started: "未开始",
+          in_progress: "进行中",
+          completed: "完成",
+          deferred: "延期",
+          skipped: "跳过",
+        };
+        $("tasks").innerHTML = D.course
+          ? `<p>已测评任务覆盖 ${ratio(allTasks.filter((t) => observed.has(t.task_id)).length, allTasks.length)} · 单项能力仍以作答为准</p>` +
+            D.course.weeks
+              .map(
+                (w) =>
+                  `<details ${w.week_id === D.enrollment.week_id ? "open" : ""}><summary>${esc(w.label)} · ${w.tasks.filter((t) => D.task_states[t.task_id]?.status === "completed").length}/${w.tasks.length}${w.status === "unavailable" ? " · 尚未取得作业" : ""}</summary>${w.tasks.map((t) => `<div class="task"><a href="${esc(t.source_url)}" rel="noreferrer">${esc(t.title)}</a><br><span class="pill">${states[D.task_states[t.task_id]?.status || "not_started"]}</span> <small>${D.task_states[t.task_id]?.source === "self_report" ? "用户自述完成 / 状态" : D.task_states[t.task_id]?.source === "evidence" ? "关联练习记录" : ""} · ${esc(t.provenance)}</small></div>`).join("")}</details>`,
+              )
+              .join("") +
+            Object.keys(D.task_states)
+              .filter((id) => !allTasks.some((t) => t.task_id === id))
+              .map(
+                (id) =>
+                  `<p class="warn">历史任务已从当前课表移除，记录保留：${esc(id)}</p>`,
+              )
+              .join("")
+          : empty("尚未加入课程；独立章节练习仍会保存。");
+        $("evidence").innerHTML = rows.length
+          ? rows
+              .slice()
+              .reverse()
+              .map(
+                (p) =>
+                  `<details><summary>${esc(p.competency)} · ${date(p.occurred_at)} <span class="pill">${esc(p.evaluation.state)}</span></summary><small>${esc(p.event_id)} · ${esc(p.evaluation.scope)}</small><h3>首次回答</h3><pre>${esc(p.received.original_answer || "未收到独立首答")}</pre><h3>提示 / 重答</h3><pre>${esc(p.received.hints || "无已记录提示")}\n${esc(p.received.retry || "未记录重答")}</pre><h3>评分依据</h3>${
+                    Object.entries(p.evaluation.rubric_scores?.dimensions || {})
+                      .map(
+                        ([k, v]) =>
+                          `<p>${esc(D.dimensions[k])} ${v.score}/3：${esc(v.reason)}</p>`,
+                      )
+                      .join("") ||
+                    `<pre>${esc(JSON.stringify(p.evaluation.dimensions, null, 2))}</pre>`
+                  }</details>`,
+              )
+              .join("")
+          : empty(
+              "还没有实际记录。完成一次学习或练习后，这里会保留回答、提示与反馈。",
+            );
+        const sections = D.study_sections
+          .filter((s) => !$("track").value || s.track === $("track").value)
+          .slice()
+          .reverse();
+        $("sections").innerHTML = sections.length
+          ? sections
+              .map(
+                (s) =>
+                  `<details><summary>${esc(s.topic)} · ${esc(s.stage)} <span class="pill">${esc(s.status)}</span></summary><small>${esc(s.breakdown)} · ${date(s.occurred_at)}</small><h3>确认要点</h3><ul>${s.confirmed_points.map((p) => `<li>${esc(p)}</li>`).join("")}</ul><h3>核心理念</h3><ul>${s.core_ideas.map((p) => `<li>${esc(p)}</li>`).join("")}</ul><h3>我的薄弱点</h3>${s.learner_shortages.length ? `<ul>${s.learner_shortages.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : `<p class="muted">此环节暂无已观察到的薄弱点。</p>`}<h3>面试口述稿 · 教练整理</h3><pre>${esc(s.interview_script || "当前环节尚未完成，暂无完整口述稿。")}</pre></details>`,
+              )
+              .join("")
+          : empty("完成一个学习环节后，这里会保留要点、核心理念和可朗读英文稿。");
+        const ledger = D.open_gaps.filter(
+          (g) => !$("track").value || g.track === $("track").value,
+        );
+        const debriefs = D.debriefs
+          .filter((d) => !$("track").value || d.track === $("track").value)
+          .slice()
+          .reverse();
+        $("debriefs").innerHTML = debriefs.length
+          ? debriefs
+              .map(
+                (d) =>
+                  `<details><summary>${esc(d.topic)} · ${esc(d.mode)} · ${date(d.occurred_at)}</summary><h3>总结</h3><ul>${d.summary_points.map((p) => `<li>${esc(p)}</li>`).join("")}</ul><h3>已观察到的优势</h3>${d.strengths.length ? `<ul>${d.strengths.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : `<p class="muted">本次没有单独记录优势。</p>`}<p class="muted">本次记录 ${d.gaps.length} 个破绽；未关闭项列在下方。</p></details>`,
+              )
+              .join("")
+          : empty("完成一次有实际作答的整段复盘后，这里会保存总结。");
+        $("gap-ledger").innerHTML = ledger.length
+          ? ledger
+              .map(
+                (g) =>
+                  `<details><summary>${esc(g.repair_target)} · ${esc(g.topic)}</summary><small>${esc(g.stage)} · ${esc(g.breakdown)} · 复测 ${date(g.due_at)}</small><h3>观察到的破绽</h3><p>${esc(g.observed_shortage)}</p><h3>核心理念</h3><p>${esc(g.core_idea)}</p><h3>标准要点</h3><ul>${g.standard_points.map((p) => `<li>${esc(p)}</li>`).join("")}</ul><h3>修复口述稿 · 教练整理</h3><pre>${esc(g.interview_script)}</pre></details>`,
+              )
+              .join("")
+          : empty("当前筛选下没有尚未关闭的个人错题或破绽。");
+      }
+      $("track").addEventListener("change", () => {
+        competencies();
+        update();
+      });
+      for (const id of ["competency", "range", "dimension"])
+        $(id).addEventListener("change", update);
+      competencies();
+      update();
+    </script>
+  </body>
+</html>

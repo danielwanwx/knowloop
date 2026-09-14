@@ -1,0 +1,72 @@
+{
+  "title": "LSM Tree 自动补全测试",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "concept-map",
+  "summary": "LSM Tree 用顺序写优化高吞吐写入，但用读放大和 compaction 成本交换。",
+  "task": "用户只给出“LSM Tree 适合写多场景”这类薄输入时，自动补全机制、取舍和适用边界。",
+  "constraints": [
+    "薄输入缺少 memtable、WAL、SSTable 和 compaction 的机制细节",
+    "白板内容需要说清楚 LSM 为什么快，以及它牺牲了什么",
+    "补全应基于稳定存储系统知识，不需要联网查最新产品细节"
+  ],
+  "source_notes": {
+    "completeness": "thin",
+    "completion_mode": "model_background",
+    "added_points": ["memtable + WAL write path", "SSTable flush and compaction", "read amplification mitigations", "write-heavy workload fit"],
+    "uncertain_points": []
+  },
+  "qa": {
+    "chapter_category": "key-technology",
+    "content_size": "short",
+    "source_kind": "Thin user prompt with automatic model-background completion",
+    "expected_layout": "concept-map",
+    "source_completeness": "thin",
+    "completion_mode": "model_background"
+  },
+  "blocks": [
+    {
+      "id": "write_path",
+      "kind": "database",
+      "title": "顺序写替代随机写",
+      "body": "新写入先进入 memtable，同时追加 WAL 保证 crash recovery。批量 flush 成 SSTable 后，磁盘写入主要是大块顺序写。"
+    },
+    {
+      "id": "sstable",
+      "kind": "storage",
+      "title": "SSTable 是不可变有序文件",
+      "body": "Flush 后的文件按 key 排序且不可变。不可变文件简化写入，但会累积多个版本和删除标记。"
+    },
+    {
+      "id": "compaction",
+      "kind": "service",
+      "title": "Compaction 控制文件数量",
+      "body": "后台合并 SSTable，清理旧版本和 tombstone。它改善读路径，但会带来写放大和后台 IO 成本。"
+    },
+    {
+      "id": "read_amp",
+      "kind": "warning",
+      "title": "读放大是核心代价",
+      "body": "点查可能要检查 memtable 和多个 SSTable。Bloom filter、sparse index 和 compaction 策略共同降低无效读取。"
+    },
+    {
+      "id": "fit",
+      "kind": "component",
+      "title": "适合 metrics、logs、IoT",
+      "body": "当写入远多于读取，且查询能接受略高延迟时，LSM 通常更合适。随机读很多的用户页面要谨慎选择。"
+    }
+  ],
+  "connectors": [
+    {"from": "write_path", "to": "sstable", "label": "flush"},
+    {"from": "sstable", "to": "compaction", "label": "merge"},
+    {"from": "compaction", "to": "read_amp", "label": "tradeoff"},
+    {"from": "read_amp", "to": "fit", "label": "choose workload"}
+  ],
+  "callouts": [
+    {
+      "title": "自动补全边界",
+      "body": "这里补的是稳定机制和取舍，不补具体厂商内部实现，避免把推断当事实。"
+    }
+  ],
+  "talk_track": "如果用户只给出 LSM Tree 适合写多场景，我会自动补出它背后的稳定机制：写入先进 memtable，同时顺序追加 WAL，然后批量 flush 成不可变的 SSTable。后台 compaction 会合并文件、清理旧版本和删除标记。这个设计把随机写变成顺序写，所以适合 metrics、logs、IoT 这类高写入系统；代价是读路径更复杂，需要 bloom filter、sparse index 和 compaction 策略来压住读放大。"
+}

@@ -1,0 +1,65 @@
+{
+  "title": "Real-Time Updates Pattern",
+  "language": "English",
+  "style": "excalidraw-plus",
+  "layout": "pipeline",
+  "summary": "Real-time updates need a durable source of truth plus a fanout path that can reconnect safely.",
+  "task": "Design live event availability updates without making WebSocket delivery the source of truth.",
+  "constraints": [
+    "Clients disconnect and reconnect frequently",
+    "Delivery can be best effort, but the canonical state must remain queryable",
+    "Fanout spikes should not block writes to the core system"
+  ],
+  "qa": {
+    "chapter_category": "pattern",
+    "content_size": "medium",
+    "source_kind": "Hello Interview pattern chapter",
+    "expected_layout": "pipeline"
+  },
+  "blocks": [
+    {
+      "id": "writer",
+      "kind": "service",
+      "title": "Canonical write first",
+      "body": "Inventory changes are committed to the database or event log before they are broadcast. The live channel reflects state; it does not define state."
+    },
+    {
+      "id": "stream",
+      "kind": "queue",
+      "title": "Change stream buffers fanout",
+      "body": "A Kafka topic or CDC stream decouples writes from live delivery. If fanout slows down, the core booking path remains protected."
+    },
+    {
+      "id": "fanout",
+      "kind": "service",
+      "title": "Fanout service owns subscriptions",
+      "body": "The fanout layer maps topics to connected clients and can shard by event id. It also controls backpressure and drops non-critical updates when needed."
+    },
+    {
+      "id": "client",
+      "kind": "client",
+      "shape": "circle",
+      "title": "Client reconnects safely",
+      "body": "On reconnect, the client sends its last seen version and refreshes from the read API before applying newer live events."
+    },
+    {
+      "id": "snapshot",
+      "kind": "database",
+      "title": "Snapshot API repairs gaps",
+      "body": "A normal read endpoint remains available for missed messages, initial page load, and reconciliation. This keeps live delivery from becoming correctness-critical."
+    }
+  ],
+  "connectors": [
+    {"from": "writer", "to": "stream", "label": "committed change"},
+    {"from": "stream", "to": "fanout", "label": "async fanout"},
+    {"from": "fanout", "to": "client", "label": "push update"},
+    {"from": "client", "to": "snapshot", "label": "repair gaps"}
+  ],
+  "callouts": [
+    {
+      "title": "Senior boundary",
+      "body": "WebSockets improve freshness, but correctness still comes from durable writes and snapshot reads."
+    }
+  ],
+  "talk_track": "For real-time updates, I would avoid making the WebSocket path correctness-critical. The system should commit the canonical inventory change first, then publish it through a stream to fanout services. Clients can receive pushes for low latency, but reconnect with a last-seen version and repair gaps through a normal snapshot API. That gives a responsive product without letting transient connections decide the truth."
+}

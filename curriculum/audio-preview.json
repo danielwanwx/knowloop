@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "provider": "ElevenLabs",
+  "voice": "Siqi Liu - Calm, Warm and Gentle",
+  "model": "Eleven v3",
+  "source": "elevenlabs.tts.optional",
+  "heading": "Text input",
+  "policy": {
+    "auto_generate": false,
+    "target_duration_minutes": 2,
+    "script_language": "zh-CN",
+    "preserve_english_terms": true,
+    "credit_guard": "页面只提供讲译脚本、复制按钮与可选生成入口；不得自动调用 API 或批量消耗 credits。"
+  }
+}

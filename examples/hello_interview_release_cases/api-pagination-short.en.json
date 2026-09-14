@@ -1,0 +1,56 @@
+{
+  "title": "Pagination Choice",
+  "language": "English",
+  "style": "excalidraw-plus",
+  "layout": "comparison",
+  "summary": "Pagination is a contract about stable traversal, not just page size.",
+  "task": "Choose offset or cursor pagination for event lists with different freshness and scale requirements.",
+  "constraints": [
+    "Large collections cannot be returned in one response",
+    "New rows may arrive while the client is paging",
+    "Some products need jump-to-page behavior while others need stable infinite scroll"
+  ],
+  "qa": {
+    "chapter_category": "api-design",
+    "content_size": "short",
+    "source_kind": "Hello Interview API design pagination",
+    "expected_layout": "comparison"
+  },
+  "blocks": [
+    {
+      "id": "offset",
+      "lane": "left",
+      "kind": "component",
+      "title": "Offset: simple and jumpable",
+      "body": "Offset pagination uses `offset` and `limit`, which is easy for clients and supports jumping to page five. It works best for smaller or mostly stable result sets."
+    },
+    {
+      "id": "offset-risk",
+      "lane": "left",
+      "kind": "caveat",
+      "title": "Offset shifts under writes",
+      "body": "If new events are inserted while the user pages, records can move between offsets. The client may see duplicates or miss rows entirely."
+    },
+    {
+      "id": "cursor",
+      "lane": "right",
+      "kind": "component",
+      "title": "Cursor: stable traversal",
+      "body": "Cursor pagination returns a token tied to the last stable record, often an encoded id or timestamp. The next request continues after that point."
+    },
+    {
+      "id": "cursor-cost",
+      "lane": "right",
+      "kind": "caveat",
+      "title": "Cursor trades off random access",
+      "body": "Cursor pagination is stronger for high-volume feeds and real-time data, but it is worse for arbitrary page jumps and requires careful ordering semantics."
+    }
+  ],
+  "callouts": [
+    {
+      "title": "Decision rule",
+      "body": "Use offset for simplicity and jump-to-page; use cursor when stable iteration matters more than random access."
+    }
+  ],
+  "talk_track": "I would first ask whether the dataset is stable while the user is paging. Offset pagination is fine for simple admin lists or small collections because it is intuitive and supports page numbers. For a live event feed or anything high volume, I would lean cursor-based pagination because it anchors the next page to a specific record and avoids duplicates or missed rows when new data arrives."
+}

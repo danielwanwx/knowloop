@@ -1,0 +1,22 @@
+{
+  "name": "crack-system-interview-skill",
+  "version": "0.10.0",
+  "description": "Interview coaching across coding, design, fundamentals, data, behavioral questions and resume deep dives, with private evidence and retests.",
+  "author": {
+    "name": "Crack System Interview contributors",
+    "url": "https://knowloop.example"
+  },
+  "homepage": "https://knowloop.example",
+  "repository": "https://knowloop.example",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "skill",
+    "plugin",
+    "interview",
+    "system-design",
+    "excalidraw"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

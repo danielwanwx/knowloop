@@ -1,0 +1,20 @@
+{
+  "name": "crack-system-interview-skill",
+  "interface": {
+    "displayName": "Crack System Interview Skills"
+  },
+  "plugins": [
+    {
+      "name": "crack-system-interview-skill",
+      "source": {
+        "source": "local",
+        "path": "./plugins/crack-system-interview-skill"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "title": "API Contract Whiteboard",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "concept-map",
+  "summary": "API 设计的核心是把资源、输入位置、协议选择和失败语义说清楚。",
+  "task": "用 5 分钟定义客户端如何调用系统，不在 API 细节上过度消耗时间。",
+  "constraints": [
+    "默认 REST，除非题目明确需要 GraphQL 的灵活查询或 RPC 的内部高性能调用",
+    "路径参数定位资源，query 修饰集合，body 承载创建/更新 payload",
+    "网络重试会放大非幂等接口的问题"
+  ],
+  "blocks": [
+    {
+      "id": "center",
+      "kind": "component",
+      "title": "API contract 是客户端承诺",
+      "body": "客户端 contract 先定义资源、行为和失败语义，再进入数据库设计。必需信息、可选过滤和 payload 边界需要清楚可读。"
+    },
+    {
+      "id": "resources",
+      "kind": "component",
+      "title": "先建模资源，再表达动作",
+      "body": "稳定资源名优先于动作名，例如 `events`、`tickets`、`bookings`。动作由 HTTP method 表达，URL 不退化成函数调用。"
+    },
+    {
+      "id": "inputs",
+      "kind": "component",
+      "title": "输入位置要表达意图",
+      "body": "缺失后请求不成立的值属于 path。缩小集合范围的条件属于 query；复杂创建或更新数据属于 request body。"
+    },
+    {
+      "id": "methods",
+      "kind": "component",
+      "title": "幂等性决定重试是否安全",
+      "body": "`GET/PUT/DELETE` 的最终状态可重复，客户端重试相对安全。`POST` 创建资源时要小心重复提交，必要时加 idempotency key。"
+    },
+    {
+      "id": "protocols",
+      "kind": "component",
+      "title": "默认 REST，例外要有理由",
+      "body": "对外 API 默认 REST。多端字段差异明显时考虑 GraphQL；内部高频服务调用再考虑 RPC 或 gRPC。"
+    },
+    {
+      "id": "responses",
+      "kind": "component",
+      "title": "返回语义要区分责任方",
+      "body": "状态码不用背冷门细节，但要区分 `4xx` 是客户端输入或权限问题，`5xx` 是服务端失败。创建成功用 `201` 会让 contract 更清楚。"
+    }
+  ],
+  "connectors": [
+    {"from": "center", "to": "resources", "label": "what exists"},
+    {"from": "center", "to": "inputs", "label": "how clients specify"},
+    {"from": "center", "to": "methods", "label": "operation semantics"},
+    {"from": "center", "to": "protocols", "label": "when REST is not enough"},
+    {"from": "center", "to": "responses", "label": "contract outcome"}
+  ],
+  "callouts": [
+    {
+      "title": "高级边界",
+      "body": "重试会放大非幂等接口问题；GraphQL 要处理 N+1；内部 RPC 的收益主要来自类型安全和低序列化成本。"
+    }
+  ],
+  "talk_track": "API 设计我不会把时间花在背 status code 上。我会先把资源和输入位置说清楚，再解释幂等性为什么影响客户端重试。只有题目出现多端字段差异或内部高频服务调用时，我才会主动引入 GraphQL 或 RPC。"
+}

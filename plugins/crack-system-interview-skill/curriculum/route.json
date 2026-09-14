@@ -1,0 +1,1606 @@
+{
+  "schema_version": "2.0",
+  "title": "12 周系统设计与算法完整学习路线",
+  "weeks": [
+    {
+      "week": 1,
+      "theme": "读扩展、大文件与同步正确性",
+      "algorithm_block": "arrays-and-hashing",
+      "projects": [
+        "bitly",
+        "dropbox"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "bitly"
+        },
+        {
+          "kind": "project-deep",
+          "project": "bitly"
+        },
+        {
+          "kind": "project-read",
+          "project": "dropbox"
+        },
+        {
+          "kind": "project-deep",
+          "project": "dropbox"
+        },
+        {
+          "kind": "integration",
+          "title": "API、数据、缓存、Blob 与一致性校准",
+          "assignment": {
+            "focus": "把 Bitly 的短链元数据/重定向热路径与 Dropbox 的文件元数据/Blob 数据面放进同一张边界图，明确哪些状态可缓存、哪些写入必须可恢复，以及同步冲突如何显式暴露。",
+            "artifact": "一张双数据面架构图，加一份不少于 8 行的决策表；每行必须写 API、主存储、索引或缓存、失效信号、一致性目标和失败后的恢复动作。",
+            "acceptance": [
+              "短链创建与文件分块上传都给出请求/响应、幂等键、数据库唯一约束和重复请求处理结果。",
+              "重定向、文件下载和设备同步三条路径分别标出缓存层、CDN/Blob 边界、TTL 或版本校验，且能解释陈旧读取的用户影响。",
+              "用一个区域网络分区场景逐项判断 Bitly 与 Dropbox 选择一致性还是可用性，并写出可观测指标和回滚条件。"
+            ],
+            "repair": "若任一流程只画组件不写状态所有权，先删去该流程的缓存，再从唯一真相源、版本号和重试语义重画；最后用重复上传或短码碰撞故障复演验证。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.bitly",
+                "heading": "2) How can we ensure that redirects are fast?"
+              },
+              {
+                "source": "hi.breakdown.dropbox",
+                "heading": "1) How can you support large files?"
+              },
+              {
+                "source": "hi.pattern.large-blobs",
+                "heading": "State Synchronization Challenges"
+              },
+              {
+                "source": "ddia.ch10",
+                "heading": "CAP 定理"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "两组 API 与实体对齐",
+                "instruction": "写短链创建/跳转、分块上传/提交、增量同步接口；给每个写接口补幂等键、版本字段和错误码。",
+                "minutes": 40
+              },
+              {
+                "title": "热读与大文件数据面",
+                "instruction": "画出短链缓存回源、预签名 Blob 上传、CDN 下载三条数据流，并逐跳标出带宽、延迟与失效责任。",
+                "minutes": 40
+              },
+              {
+                "title": "存储与索引决策",
+                "instruction": "比较 DynamoDB/Postgres 在唯一短码、文件版本、共享权限上的约束能力，给出主键、二级索引和容量估算。",
+                "minutes": 40
+              },
+              {
+                "title": "分区故障演练",
+                "instruction": "注入缓存失效丢失、Blob 提交超时和同步版本冲突，逐个写检测信号、降级动作、补偿与验收查询。",
+                "minutes": 40
+              }
+            ]
+          }
+        },
+        {
+          "kind": "mock",
+          "title": "Bitly + Dropbox 双题 Mock",
+          "assignment": {
+            "focus": "在未知抽题条件下完成一次 45 分钟主设计，并在切换题目后回答短码唯一性、大文件断点续传、缓存一致性与跨设备冲突四类追问。",
+            "artifact": "一份完整白板录像或逐分钟笔记，外加一张追问证据表；表中记录每次澄清、容量假设、方案取舍、失败模式和面试官提示。",
+            "acceptance": [
+              "前 10 分钟锁定功能/非功能需求与数量级，20 分钟内出现可运行的端到端主链路，未提前钻进实现细节。",
+              "至少回答两个 Bitly 深挖和两个 Dropbox 深挖，每个答案都包含机制、失败条件、指标阈值与修复动作。",
+              "复述时能在 90 秒内解释为何短码唯一约束与文件提交版本不能仅靠缓存或客户端保证。"
+            ],
+            "repair": "如果主设计超时，按需求、接口、数据模型、HLD 四个检查点重新计时；如果追问只给技术名词，强制用一次具体失败注入补齐因果链后再录 10 分钟复测。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.bitly",
+                "heading": "1) How can we ensure short urls are unique?"
+              },
+              {
+                "source": "hi.breakdown.dropbox",
+                "heading": "2) How can we make uploads, downloads, and syncing as fast as possible?"
+              },
+              {
+                "source": "hi.senior.expectations",
+                "heading": "Depth"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "完整主 Mock",
+                "instruction": "随机抽 Bitly 或 Dropbox，按真实面试节奏完成澄清、估算、API、数据模型、高层设计与一个主动深挖。",
+                "minutes": 45
+              },
+              {
+                "title": "切题压力追问",
+                "instruction": "切换到另一题，连续回答短码碰撞、热重定向、断点续传、同步冲突四问，不得重画整题。",
+                "minutes": 30
+              },
+              {
+                "title": "故障与权衡复盘",
+                "instruction": "回放并标记没有状态所有者、没有量级或没有恢复路径的句子；逐句补成可证伪设计。",
+                "minutes": 40
+              },
+              {
+                "title": "弱段重录",
+                "instruction": "只重录得分最低的 10–15 分钟片段，要求无提示完成，并用同一评分表对比前后差异。",
+                "minutes": 45
+              }
+            ]
+          }
+        },
+        {
+          "kind": "repair",
+          "title": "证据复盘与最弱维度复测",
+          "assignment": {
+            "focus": "用本周证据锁定唯一最弱维度，并通过定向故障题证明修复有效；不做泛泛重读。",
+            "artifact": "一份按严重度排序的缺陷账本和一段 15 分钟无提示复测；每条缺陷包含原回答、反例、正确不变量、修复步骤及新证据。",
+            "acceptance": [
+              "缺陷账本至少覆盖一次唯一性破坏、一次缓存陈旧和一次大文件重试重复提交，且指出触发条件。",
+              "最弱维度只有一个明确名称与基线分数，复测使用同一评分项并至少提升一级或留下可复现阻塞证据。",
+              "复测能从监控告警追到数据修复，写清受影响范围、停止扩散、回放/补偿和最终一致性校验。"
+            ],
+            "repair": "若分数没有提升，禁止继续加阅读量；把失败答案缩成一个不变量和一个故障时间线，逐跳验证后再做同型但不同参数的第二次复测。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.bitly",
+                "heading": "3) How can we scale to support 1B shortened urls and 100M DAU?"
+              },
+              {
+                "source": "hi.breakdown.dropbox",
+                "heading": "4) Users can automatically sync files across devices"
+              },
+              {
+                "source": "ddia.ch13",
+                "heading": "信任但验证"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "缺陷证据归因",
+                "instruction": "从 Mock 记录提取最多 5 个失分点，按用户影响和因果距离排序，选出唯一最弱维度。",
+                "minutes": 30
+              },
+              {
+                "title": "不变量与故障时间线",
+                "instruction": "为短码、文件版本和权限各写一个不变量；重放最严重故障，标出哪一步首先违例。",
+                "minutes": 50
+              },
+              {
+                "title": "修复方案与校验查询",
+                "instruction": "补唯一约束、幂等提交、版本校验或对账任务，并写可直接运行思维实验的校验查询与告警阈值。",
+                "minutes": 40
+              },
+              {
+                "title": "无提示复测",
+                "instruction": "用变化后的流量或故障参数复答 15 分钟，按原评分表打分并记录尚未关闭的唯一缺口。",
+                "minutes": 40
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "theme": "边缘保护、共享内存状态与可靠调度",
+      "algorithm_block": "two-pointers",
+      "projects": [
+        "distributed-rate-limiter",
+        "distributed-cache",
+        "job-scheduler"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "distributed-rate-limiter"
+        },
+        {
+          "kind": "project-deep",
+          "project": "distributed-rate-limiter"
+        },
+        {
+          "kind": "project-read",
+          "project": "distributed-cache"
+        },
+        {
+          "kind": "project-deep",
+          "project": "distributed-cache"
+        },
+        {
+          "kind": "project-read",
+          "project": "job-scheduler"
+        },
+        {
+          "kind": "project-deep",
+          "project": "job-scheduler"
+        },
+        {
+          "kind": "mock",
+          "title": "基础设施三题动态 Mock 与修复",
+          "assignment": {
+            "focus": "把限流器、分布式缓存与任务调度器放在一次容量突增事故中，检验分片、热键、租约、重试和至少一次执行能否形成一致的可靠性解释。",
+            "artifact": "一份三选一完整 Mock 记录，加一张跨题事故时间线；时间线必须串起流量入口、规则/缓存分片、调度租约、重复执行和恢复后的对账。",
+            "acceptance": [
+              "完整题在 45 分钟内给出吞吐/延迟假设、分片键、状态所有者、复制或故障转移边界，并主动说明一个热点。",
+              "另外两题各接受至少两个追问，必须覆盖 1M 请求/秒限流、缓存读写热键、任务至少一次执行中的任意四项。",
+              "事故演练能区分丢请求、重复执行和陈旧规则三种结果，并为每种结果给出独立指标与数据修复动作。"
+            ],
+            "repair": "若回答把 Redis、队列或一致性哈希当作结论，先画单节点正确性，再加入节点宕机与网络分区；只有能说明键迁移、租约过期和幂等副作用时才算关闭。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.distributed-rate-limiter",
+                "heading": "1) How do we scale to handle 1M requests/second?"
+              },
+              {
+                "source": "hi.breakdown.distributed-cache",
+                "heading": "5) What happens if you have a hot key that is being written to a lot?"
+              },
+              {
+                "source": "hi.breakdown.job-scheduler",
+                "heading": "3) How can we ensure at-least-once execution of jobs?"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "基础设施主 Mock",
+                "instruction": "随机抽一题，从流量估算做到故障转移；明确每份可变状态的键、原子操作、复制方式与延迟预算。",
+                "minutes": 45
+              },
+              {
+                "title": "另两题快速追问",
+                "instruction": "每题 15 分钟：分别应对热键/扩容和租约/重复执行，不允许只报组件名。",
+                "minutes": 30
+              },
+              {
+                "title": "联合事故注入",
+                "instruction": "模拟配置推送落后、缓存节点重平衡和调度 worker 暂停同时发生，写出数据结果与告警顺序。",
+                "minutes": 40
+              },
+              {
+                "title": "单点机制修复",
+                "instruction": "挑最模糊的状态迁移或重试路径重画，补幂等键、fencing token、回放边界和验收指标后复答。",
+                "minutes": 45
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "theme": "长连接、实时扇出与会话恢复",
+      "algorithm_block": "sliding-window",
+      "projects": [
+        "whatsapp",
+        "fb-live-comments",
+        "online-chess"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "whatsapp"
+        },
+        {
+          "kind": "project-deep",
+          "project": "whatsapp"
+        },
+        {
+          "kind": "project-read",
+          "project": "fb-live-comments"
+        },
+        {
+          "kind": "project-deep",
+          "project": "fb-live-comments"
+        },
+        {
+          "kind": "project-read",
+          "project": "online-chess"
+        },
+        {
+          "kind": "project-deep",
+          "project": "online-chess"
+        },
+        {
+          "kind": "mock",
+          "title": "实时系统三题动态 Mock 与修复",
+          "assignment": {
+            "focus": "在 WhatsApp、直播评论和在线象棋之间迁移长连接设计，证明自己能区分持久消息、瞬时广播与权威游戏状态，而不是复用同一种 Pub/Sub 答案。",
+            "artifact": "一份随机主 Mock 录像或逐分钟稿，以及一张三列交付语义表；逐列写连接归属、排序范围、离线恢复、背压策略和权威状态。",
+            "acceptance": [
+              "能分别定义聊天消息按会话排序、直播评论允许的展示偏差、棋局走子与计时的服务器裁决边界。",
+              "至少完成连接断开重连、百万观众 mega-stream、500K 并发棋局中的三个故障追问，并给出恢复游标或版本依据。",
+              "对慢消费者、跨服务器顺序和区域故障分别给出丢弃/降采样/持久化选择，且说明用户可见后果。"
+            ],
+            "repair": "若三题均只写 WebSocket + Redis，强制删除中间件名称，改用交付保证、排序键、保留时长和状态机描述；再选一题加入重连风暴进行复测。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.whatsapp",
+                "heading": "5) How do we handle out-of-order messages?"
+              },
+              {
+                "source": "hi.breakdown.fb-live-comments",
+                "heading": "2) How will the system scale to support millions of concurrent viewers?"
+              },
+              {
+                "source": "hi.breakdown.online-chess",
+                "heading": "3) How do we keep the clock fair despite uneven latency?"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "实时主 Mock",
+                "instruction": "随机抽一题，量化连接数、消息率和端到端延迟；画连接网关、路由、状态存储及恢复链路。",
+                "minutes": 45
+              },
+              {
+                "title": "语义切换追问",
+                "instruction": "用另两题验证同一设计：指出哪些组件可复用、哪些排序或持久性假设必须改变。",
+                "minutes": 30
+              },
+              {
+                "title": "断连与热点演练",
+                "instruction": "注入网关宕机、mega-stream 热点和棋钟网络抖动，逐项写客户端行为、服务器裁决与观测信号。",
+                "minutes": 40
+              },
+              {
+                "title": "交付语义重答",
+                "instruction": "选失分最多的一题，只围绕消息 ID、游标、顺序、幂等和背压重答 15 分钟并复评分。",
+                "minutes": 45
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "theme": "社交 feed、媒体管线与全球读取",
+      "algorithm_block": "stack",
+      "projects": [
+        "fb-news-feed",
+        "instagram",
+        "youtube"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "fb-news-feed"
+        },
+        {
+          "kind": "project-deep",
+          "project": "fb-news-feed"
+        },
+        {
+          "kind": "project-read",
+          "project": "instagram"
+        },
+        {
+          "kind": "project-deep",
+          "project": "instagram"
+        },
+        {
+          "kind": "project-read",
+          "project": "youtube"
+        },
+        {
+          "kind": "project-deep",
+          "project": "youtube"
+        },
+        {
+          "kind": "mock",
+          "title": "社交与媒体三题动态 Mock 与修复",
+          "assignment": {
+            "focus": "比较 News Feed 的扇出、Instagram 的媒体 Feed 与 YouTube 的上传转码/播放管道，验证读放大、写放大、Blob 派生资产和 CDN 缓存策略能随负载改变。",
+            "artifact": "一份三题轮转白板记录，加一张容量与派生数据表；包含名人热点、4GB 视频、转码版本、Feed 游标和 CDN 回源的数量级。",
+            "acceptance": [
+              "能用关注图和粉丝规模说明 fanout-on-write、fanout-on-read 或混合方案的切换阈值，而非只给固定选择。",
+              "能完整描述原始媒体上传、异步转码、manifest/缩略图生成、CDN 分发与失败重试的状态转换。",
+              "在热点帖子、视频处理积压和 CDN miss storm 三种故障下分别给出限流、隔离、降级与恢复验收指标。"
+            ],
+            "repair": "如果 Feed 与视频管道混成一个队列，先按用户请求路径和离线派生路径拆开，再为每条路径补容量单位、背压入口和可丢/不可丢数据，最后重答热点名人追问。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.fb-news-feed",
+                "heading": "2) How do we handle users with a large number of followers?"
+              },
+              {
+                "source": "hi.breakdown.instagram",
+                "heading": "2) The system should render photos and videos instantly, supporting photos up to 8mb and videos up to 4GB"
+              },
+              {
+                "source": "hi.breakdown.youtube",
+                "heading": "1) How can we handle processing a video to support adaptive bitrate streaming?"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "Feed 或媒体主 Mock",
+                "instruction": "随机抽一题完成端到端设计，量化 DAU、关注边、媒体大小、带宽或转码吞吐，并明确同步与异步边界。",
+                "minutes": 45
+              },
+              {
+                "title": "扇出与管道切题",
+                "instruction": "另两题各 15 分钟，集中回答名人扇出、4GB 媒体即时呈现与自适应码率转码。",
+                "minutes": 30
+              },
+              {
+                "title": "派生资产故障注入",
+                "instruction": "模拟 Feed 缓存过期、转码队列堆积、CDN 回源放大，写出保护源站和恢复派生视图的顺序。",
+                "minutes": 40
+              },
+              {
+                "title": "阈值化方案修复",
+                "instruction": "把所有“规模大时”替换成具体切换阈值与指标，再用名人直播发布 4GB 视频场景复答。",
+                "minutes": 45
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "theme": "协作编辑与不可信代码执行",
+      "algorithm_block": "binary-search",
+      "projects": [
+        "google-docs",
+        "leetcode"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "google-docs"
+        },
+        {
+          "kind": "project-deep",
+          "project": "google-docs"
+        },
+        {
+          "kind": "project-read",
+          "project": "leetcode"
+        },
+        {
+          "kind": "project-deep",
+          "project": "leetcode"
+        },
+        {
+          "kind": "integration",
+          "title": "操作日志、队列、沙箱与资源治理",
+          "assignment": {
+            "focus": "同时刻画 Google Docs 的并发操作收敛链路和 LeetCode 的不可信代码执行链路，明确可重放日志、排队公平性、资源配额与隔离边界。",
+            "artifact": "两张状态机图：文档操作从客户端序号到持久日志/快照/广播，提交任务从排队到沙箱执行/判题/回收；附一张资源与故障预算表。",
+            "acceptance": [
+              "文档链路写清操作 ID、base version、并发变换或 CRDT 合并、重复消息和断线重放的确定结果。",
+              "判题链路写清队列优先级、CPU/内存/时间/网络限制、镜像隔离、测试数据权限和进程清理责任。",
+              "分别注入操作乱序与恶意无限循环，能从检测指标走到限流/终止、状态恢复和用户结果校验。"
+            ],
+            "repair": "若答案以“最终一致”或“容器隔离”结束，补出具体版本规则和逃逸面；用两客户端同位置编辑与 fork bomb 两个反例逐步验证。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.google-docs",
+                "heading": "2) Multiple users should be able to edit the same document concurrently."
+              },
+              {
+                "source": "hi.breakdown.leetcode",
+                "heading": "1) How will the system support isolation and security when running user code?"
+              },
+              {
+                "source": "ddia.ch6",
+                "heading": "CRDT 与操作变换"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "文档操作日志",
+                "instruction": "画两个离线客户端并发编辑后的上传、排序、合并、持久化、广播与重连重放，标出每个版本字段。",
+                "minutes": 40
+              },
+              {
+                "title": "判题执行状态机",
+                "instruction": "画提交入队、worker 领取、沙箱启动、测试、结果持久化和清理，写租约、幂等与超时状态转移。",
+                "minutes": 40
+              },
+              {
+                "title": "资源与公平治理",
+                "instruction": "为普通提交和竞赛突发分配队列、并发、CPU/内存预算，定义背压、限流和付费/公平策略。",
+                "minutes": 40
+              },
+              {
+                "title": "乱序与逃逸演练",
+                "instruction": "注入文档消息乱序及恶意代码占满资源，逐项写检测、隔离、恢复、审计证据与验收测试。",
+                "minutes": 40
+              }
+            ]
+          }
+        },
+        {
+          "kind": "mock",
+          "title": "Google Docs + LeetCode 双题 Mock",
+          "assignment": {
+            "focus": "在协同编辑与在线判题之间进行一次完整随机 Mock，重点检验候选人能否主动定义并发正确性和不可信执行威胁模型。",
+            "artifact": "一份 45 分钟主 Mock 记录、另一题 30 分钟追问记录，以及按正确性/安全性/伸缩性分栏的证据评分表。",
+            "acceptance": [
+              "Google Docs 回答能给出明确收敛条件、实时广播路径、断线恢复与存储压缩，而不是只说 WebSocket。",
+              "LeetCode 回答能给出隔离层、队列状态机、重复执行处理和 100K 人竞赛容量保护，而不是只说 Kubernetes。",
+              "至少一个追问从用户症状反推到日志/指标，再到修复和事后数据校验，形成完整故障闭环。"
+            ],
+            "repair": "若并发或安全边界是隐含假设，暂停扩容讨论，先用反例证明当前设计会丢编辑或越权；补不变量后仅重录该深挖段。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.google-docs",
+                "heading": "1) How do we scale to millions of websocket connections?"
+              },
+              {
+                "source": "hi.breakdown.leetcode",
+                "heading": "3) How would the system scale to support competitions with 100,000 users?"
+              },
+              {
+                "source": "hi.senior.expectations",
+                "heading": "Proactiveness"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "双题随机主 Mock",
+                "instruction": "随机抽一题，按真实面试完成需求、估算、接口、数据模型、HLD，并主动提出一个正确性或威胁模型深挖。",
+                "minutes": 45
+              },
+              {
+                "title": "另一题压力追问",
+                "instruction": "围绕百万连接或 100K 竞赛追问 30 分钟，持续量化连接、提交、队列和存储压力。",
+                "minutes": 30
+              },
+              {
+                "title": "证据化复盘",
+                "instruction": "找出所有缺少版本、租约、配额或权限边界的回答，给每处补一个可复现故障。",
+                "minutes": 40
+              },
+              {
+                "title": "正确性弱段重录",
+                "instruction": "对最低分的并发或隔离段无提示重答，要求陈述不变量、机制、失败条件、监控和恢复。",
+                "minutes": 45
+              }
+            ]
+          }
+        },
+        {
+          "kind": "repair",
+          "title": "并发语义与隔离边界复测",
+          "assignment": {
+            "focus": "只修复操作收敛或沙箱隔离中得分最低的一项，用对抗性输入验证修复，而非再次讲完整架构。",
+            "artifact": "一个最小反例包：并发编辑事件序列或恶意代码样本的文字模型、预期状态、原设计错误结果、修复后结果和监控证据。",
+            "acceptance": [
+              "并发方向至少覆盖重复、乱序、离线旧版本三种输入，并能解释每个操作最终是否保留及为何。",
+              "隔离方向至少覆盖无限循环、内存耗尽、网络访问或文件逃逸中的三项，并写终止与清理后置条件。",
+              "复测使用未见过的事件顺序或资源参数，能在 15 分钟内无提示完成且没有改变既定正确性目标。"
+            ],
+            "repair": "若反例仍靠人工判断，给状态机增加版本/租约/配额字段并逐步执行；若无法唯一推出结果，说明不变量未定义，退回重写再测。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.google-docs",
+                "heading": "When Updates Happen"
+              },
+              {
+                "source": "hi.breakdown.leetcode",
+                "heading": "4) How would the system handle running test cases?"
+              },
+              {
+                "source": "ddia.ch8",
+                "heading": "悲观并发控制与乐观并发控制"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "选择唯一失败反例",
+                "instruction": "从评分表选择收敛或隔离中影响最大的缺陷，写最短事件序列和错误的用户可见结果。",
+                "minutes": 30
+              },
+              {
+                "title": "逐步执行与修复",
+                "instruction": "逐状态执行原方案，定位首次违例；加入最小版本规则、权限或资源控制后重新执行。",
+                "minutes": 50
+              },
+              {
+                "title": "对抗输入扩展",
+                "instruction": "改变消息到达顺序或 CPU/内存参数，验证修复不会引入丢更新、僵尸任务或资源泄漏。",
+                "minutes": 40
+              },
+              {
+                "title": "十五分钟复测",
+                "instruction": "无提示讲清反例、机制和恢复证据；按同一 rubric 评分并关闭或保留唯一阻塞项。",
+                "minutes": 40
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "theme": "高争用交易、租约与资金正确性",
+      "algorithm_block": "linked-list",
+      "projects": [
+        "ticketmaster",
+        "online-auction",
+        "payment-system"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "ticketmaster"
+        },
+        {
+          "kind": "project-deep",
+          "project": "ticketmaster"
+        },
+        {
+          "kind": "project-read",
+          "project": "online-auction"
+        },
+        {
+          "kind": "project-deep",
+          "project": "online-auction"
+        },
+        {
+          "kind": "project-read",
+          "project": "payment-system"
+        },
+        {
+          "kind": "project-deep",
+          "project": "payment-system"
+        },
+        {
+          "kind": "mock",
+          "title": "交易三题动态 Mock 与修复",
+          "assignment": {
+            "focus": "用 Ticketmaster 抢票、Online Auction 竞价与 Payment System 异步扣款检验高争用下的唯一占有、单调状态转换、幂等副作用与可审计恢复。",
+            "artifact": "一份随机主 Mock，加一张三业务不变量矩阵；矩阵必须列出唯一座位、最高有效出价、资金守恒的写入原子点、外部副作用和对账方式。",
+            "acceptance": [
+              "能分别说明临时预留过期、并发更高出价、支付网关超时的确定状态结果，不能依赖“稍后重试”掩盖歧义。",
+              "至少对一个热点资源给出排队/削峰、条件写入或串行化策略，并量化锁等待、吞吐与用户公平性的代价。",
+              "支付方向包含幂等键、不可变账本、webhook 重复/乱序处理和对账；票务/竞拍包含过期或结束时刻裁决。"
+            ],
+            "repair": "若回答声称 exactly-once 或分布式锁即可保证正确，改写成至少一次消息 + 幂等状态机，加入持锁者暂停/回归与外部成功本地超时反例后重测。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.ticketmaster",
+                "heading": "1) How do we improve the booking experience by reserving tickets?"
+              },
+              {
+                "source": "hi.breakdown.online-auction",
+                "heading": "1) How can we ensure strong consistency for bids?"
+              },
+              {
+                "source": "hi.breakdown.payment-system",
+                "heading": "3) The system should guarantee transaction safety and financial integrity despite the inherently asynchronous nature of external payment networks"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "交易主 Mock",
+                "instruction": "随机抽一题，先声明业务不变量，再画状态机、原子写入、外部调用与失败恢复；量化峰值争用。",
+                "minutes": 45
+              },
+              {
+                "title": "另两题一致性追问",
+                "instruction": "分别处理预留过期、并发竞价或支付超时，逐步说明每个重试看到的状态。",
+                "minutes": 30
+              },
+              {
+                "title": "僵尸写入与重复回调",
+                "instruction": "注入持锁 worker 暂停后恢复及 webhook 重复乱序，验证 fencing、幂等键、账本和对账是否闭环。",
+                "minutes": 40
+              },
+              {
+                "title": "不变量驱动修复",
+                "instruction": "选择首次被破坏的不变量，删除多余组件并补最小原子机制；用不同到达顺序重答并评分。",
+                "minutes": 45
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 7,
+      "theme": "市场数据、订单与地理调度",
+      "algorithm_block": "trees",
+      "projects": [
+        "robinhood",
+        "uber"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "robinhood"
+        },
+        {
+          "kind": "project-deep",
+          "project": "robinhood"
+        },
+        {
+          "kind": "project-read",
+          "project": "uber"
+        },
+        {
+          "kind": "project-deep",
+          "project": "uber"
+        },
+        {
+          "kind": "integration",
+          "title": "实时更新、外部系统与一致性边界",
+          "assignment": {
+            "focus": "对照 Robinhood 行情/订单和 Uber 位置/派单两类实时系统，划清高频近似更新、不可丢业务命令、外部系统回报及最终用户状态的边界。",
+            "artifact": "一张四通道时序图：行情、订单、司机位置、派单；每条标出事件键、允许乱序窗口、真相源、降采样/背压及客户端恢复游标。",
+            "acceptance": [
+              "行情与司机位置都能丢弃或合并旧更新，但订单状态和派单接受必须有单调状态机与幂等命令；图中差异明确。",
+              "能解释交易所回报或司机超时晚到时，如何按版本/状态拒绝陈旧转换并向客户端推送可恢复结果。",
+              "至少量化一个热门股票和一个机场热点的更新率、分片压力与降级阈值，并写出准确性损失。"
+            ],
+            "repair": "若所有实时事件都进入同一 Kafka topic 后便结束，按业务键和交付语义拆通道；对每条补乱序、重复、积压时的确定处理后再演练。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.robinhood",
+                "heading": "2) How does the system track order updates?"
+              },
+              {
+                "source": "hi.breakdown.uber",
+                "heading": "2) How can we manage system overload from frequent driver location updates while ensuring location accuracy?"
+              },
+              {
+                "source": "ddia.ch12",
+                "heading": "当消费者跟不上生产者时"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "四通道语义分类",
+                "instruction": "分别写行情、订单、位置、派单的键、频率、保留时长、顺序和可丢性，避免用统一交付保证。",
+                "minutes": 40
+              },
+              {
+                "title": "外部回报状态机",
+                "instruction": "画交易所订单回报与司机接受/超时的事件时序，用版本或合法转移拒绝晚到状态。",
+                "minutes": 40
+              },
+              {
+                "title": "热点与背压预算",
+                "instruction": "估算热门股票和机场网格的单分区压力，设计合并更新、分层 fanout、限流或负载削减阈值。",
+                "minutes": 40
+              },
+              {
+                "title": "断连恢复校验",
+                "instruction": "注入客户端断线和消费者积压，写快照+增量恢复、缺口检测以及订单/派单最终核验。",
+                "minutes": 40
+              }
+            ]
+          }
+        },
+        {
+          "kind": "mock",
+          "title": "Robinhood + Uber 双题 Mock",
+          "assignment": {
+            "focus": "完成一次金融订单或叫车派单主设计，并在切题后证明实时展示与强业务状态不会混淆。",
+            "artifact": "一份主 Mock 记录与一份 30 分钟切题追问稿，另附“可近似/不可近似”决策清单及每项理由。",
+            "acceptance": [
+              "主设计在需求阶段明确实时延迟、订单或派单正确性、外部依赖和峰值负载，不把强一致性施加给所有读。",
+              "Robinhood 能回答行情 fanout、订单回报、订单一致性；Uber 能回答位置索引、同一司机并发请求、峰值请求不丢中的至少四问。",
+              "能用一个晚到事件和一个热点分片故障说明检测信号、用户可见状态、降级及恢复后的对账。"
+            ],
+            "repair": "若设计无法回答“谁有权决定最终状态”，先标出交易所或派单状态机的权威写者；再删除任何绕过该写者的缓存写路径并复答。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.robinhood",
+                "heading": "3) How does the system manage order consistency?"
+              },
+              {
+                "source": "hi.breakdown.uber",
+                "heading": "3) How do we prevent multiple ride requests from being sent to the same driver simultaneously?"
+              },
+              {
+                "source": "hi.senior.expectations",
+                "heading": "Breadth"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "订单或派单主 Mock",
+                "instruction": "随机抽题，画权威状态机、实时读模型和外部依赖；量化高频事件与业务命令两类吞吐。",
+                "minutes": 45
+              },
+              {
+                "title": "切题四连问",
+                "instruction": "用另一题连续回答热点、乱序、重复命令和外部系统超时，每问给出确定状态。",
+                "minutes": 30
+              },
+              {
+                "title": "近似边界复盘",
+                "instruction": "逐条审查行情/位置/订单/派单，指出错误地选择强一致或允许陈旧的位置及成本。",
+                "minutes": 40
+              },
+              {
+                "title": "权威写路径重录",
+                "instruction": "重录最弱状态机段，必须包含合法转移、版本条件、幂等、超时和恢复校验。",
+                "minutes": 45
+              }
+            ]
+          }
+        },
+        {
+          "kind": "repair",
+          "title": "订单与位置热点复测",
+          "assignment": {
+            "focus": "定向修复热门股票 fanout 或机场司机位置热点，并验证缓解热点后不会破坏订单/派单正确性。",
+            "artifact": "一份热点负载表与前后架构差异图；至少包含键分布、峰值 QPS、单节点上限、拆分策略、准确性或延迟代价和回滚阈值。",
+            "acceptance": [
+              "能识别热点是单键读、单键写、订阅 fanout 还是地理网格倾斜，并选择不同缓解手段。",
+              "压测思维实验中给出达到阈值前后的 P99、积压或陈旧度变化，并明确何时触发降采样/扩分区。",
+              "热点迁移期间订单与派单状态仍由同一权威状态机裁决，重复或晚到命令有确定结果。"
+            ],
+            "repair": "若只提出“加机器”，改用一个无法水平拆分的热门键反例；设计二级分片、分层聚合或时间桶，并写合并读与一致性代价。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.robinhood",
+                "heading": "1) How can the system scale up live price updates?"
+              },
+              {
+                "source": "hi.breakdown.uber",
+                "heading": "1) How do we handle frequent driver location updates and efficient proximity searches on location data?"
+              },
+              {
+                "source": "ddia.ch7",
+                "heading": "倾斜的工作负载与缓解热点"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "热点类型定量诊断",
+                "instruction": "选热门股票或机场网格，写键频率分布、单分区容量和首次越过的资源阈值。",
+                "minutes": 30
+              },
+              {
+                "title": "拆分与聚合方案",
+                "instruction": "设计读副本、二级分片、时间桶或分层 fanout，逐项计算写放大、合并读和陈旧度。",
+                "minutes": 50
+              },
+              {
+                "title": "迁移故障演练",
+                "instruction": "模拟拆分中双写、路由缓存陈旧与节点宕机，写防重复、回退和状态校验。",
+                "minutes": 40
+              },
+              {
+                "title": "变参复测",
+                "instruction": "把流量倾斜再提高一个数量级，无提示解释新瓶颈、保护阈值和不会破坏的业务不变量。",
+                "minutes": 40
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 8,
+      "theme": "地理检索、匹配与本地市场",
+      "algorithm_block": "tries",
+      "projects": [
+        "tinder",
+        "gopuff",
+        "yelp"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "tinder"
+        },
+        {
+          "kind": "project-deep",
+          "project": "tinder"
+        },
+        {
+          "kind": "project-read",
+          "project": "gopuff"
+        },
+        {
+          "kind": "project-deep",
+          "project": "gopuff"
+        },
+        {
+          "kind": "project-read",
+          "project": "yelp"
+        },
+        {
+          "kind": "project-deep",
+          "project": "yelp"
+        },
+        {
+          "kind": "mock",
+          "title": "地理与市场三题动态 Mock 与修复",
+          "assignment": {
+            "focus": "在 Tinder 候选匹配、Gopuff 可配送库存与 Yelp 商户搜索之间比较地理索引、过滤顺序、排重约束和强/弱新鲜度。",
+            "artifact": "一份三题轮转 Mock，加一张地理查询计划表；写 geohash/quadtree 粒度、候选召回、业务过滤、排序、分页及库存/滑动/评论的约束点。",
+            "acceptance": [
+              "能解释三题的距离含义不同：Tinder 最大距离、Gopuff 路况/驾驶时间、Yelp 城市或邻域边界，并据此调整索引与精排。",
+              "分别处理已滑过用户不重复、库存下单时不超卖、每用户每商户一条评论三个约束，说明原子检查位置。",
+              "在城市热点和位置变化下给出分片倾斜、缓存键、新鲜度与降级策略，并量化错误候选或库存陈旧影响。"
+            ],
+            "repair": "若三题都回答“用 geohash 查附近”，强制写出粗召回后的精确过滤与业务约束；用跨网格边界、堵车和重复写三个反例复测。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.tinder",
+                "heading": "3) How can the system avoid showing user profiles that the user has previously swiped on?"
+              },
+              {
+                "source": "hi.breakdown.gopuff",
+                "heading": "1) Make availability lookups incorporate traffic and drive time"
+              },
+              {
+                "source": "hi.breakdown.yelp",
+                "heading": "4) How would you modify your system to allow searching by predefined location names such as cities or neighborhoods?"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "地理市场主 Mock",
+                "instruction": "随机抽一题，量化位置更新、查询半径、候选数与延迟；画粗召回、过滤、精排和写入约束。",
+                "minutes": 45
+              },
+              {
+                "title": "跨题查询计划",
+                "instruction": "另两题各写一条查询计划，明确索引输入、边界候选、业务过滤、排序和分页游标。",
+                "minutes": 30
+              },
+              {
+                "title": "边界与热点注入",
+                "instruction": "模拟网格边界、交通突变、城市中心热分片与缓存陈旧，写错误结果和修复顺序。",
+                "minutes": 40
+              },
+              {
+                "title": "约束点修复",
+                "instruction": "重答重复滑动、库存超卖或重复评论中最弱一项，必须给条件写入、冲突结果和用户重试语义。",
+                "minutes": 45
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 9,
+      "theme": "抓取、索引、权限与搜索质量",
+      "algorithm_block": "heap-priority-queue",
+      "projects": [
+        "google-news",
+        "fb-post-search",
+        "web-crawler"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "google-news"
+        },
+        {
+          "kind": "project-deep",
+          "project": "google-news"
+        },
+        {
+          "kind": "project-read",
+          "project": "fb-post-search"
+        },
+        {
+          "kind": "project-deep",
+          "project": "fb-post-search"
+        },
+        {
+          "kind": "project-read",
+          "project": "web-crawler"
+        },
+        {
+          "kind": "project-deep",
+          "project": "web-crawler"
+        },
+        {
+          "kind": "mock",
+          "title": "搜索与抓取三题动态 Mock 与修复",
+          "assignment": {
+            "focus": "串联新闻采集、Web Crawl frontier 与 Facebook 帖子倒排索引，检验新鲜度、礼貌性、权限过滤、排序分页和索引回填能否同时成立。",
+            "artifact": "一份随机主 Mock 和一张“发现→抓取→解析→索引→查询”数据血缘图；每阶段写事件 ID、去重键、延迟 SLO、失败队列与可重放来源。",
+            "acceptance": [
+              "抓取侧说明 robots.txt/域名级速率、URL canonicalization、frontier 去重和断点恢复，不因扩容破坏礼貌性。",
+              "查询侧说明多关键词或短语索引、recency/like 排序、权限过滤发生位置及稳定游标，避免返回越权或重复结果。",
+              "新闻发布 30 分钟内可见、突发热点低于 200ms 与 10B 页/5 天三个目标至少完成两项容量反推和瓶颈保护。"
+            ],
+            "repair": "若只画通用 ETL，把每条边改为具体数据契约和 offset；加入解析器 bug 回填、权限撤销和 frontier worker 宕机，验证可重放与删除传播。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.google-news",
+                "heading": "3) How do we ensure articles appear in feeds within 30 minutes of publication?"
+              },
+              {
+                "source": "hi.breakdown.fb-post-search",
+                "heading": "2) How can we handle multi-keyword, phrase queries?"
+              },
+              {
+                "source": "hi.breakdown.web-crawler",
+                "heading": "2) How can we ensure politeness and adhere to robots.txt?"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "搜索或抓取主 Mock",
+                "instruction": "随机抽一题，量化页面/帖子/文章写入与查询，画可重放数据流、索引结构和查询路径。",
+                "minutes": 45
+              },
+              {
+                "title": "新鲜度与权限追问",
+                "instruction": "切换另两题，回答发布延迟、短语查询、权限撤销与 robots 礼貌中的三项。",
+                "minutes": 30
+              },
+              {
+                "title": "回填与删除事故",
+                "instruction": "模拟解析器错误需要重建索引、帖子权限变更和 worker 丢进度，写恢复源、offset 与验收抽样。",
+                "minutes": 40
+              },
+              {
+                "title": "稳定结果修复",
+                "instruction": "针对重复/漏结果或越权结果重答索引更新和分页，补版本水位、过滤顺序及用户可见延迟。",
+                "minutes": 45
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 10,
+      "theme": "指标、事件聚合与近似计算",
+      "algorithm_block": "backtracking",
+      "projects": [
+        "metrics-monitoring",
+        "ad-click-aggregator",
+        "top-k"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "metrics-monitoring"
+        },
+        {
+          "kind": "project-deep",
+          "project": "metrics-monitoring"
+        },
+        {
+          "kind": "project-read",
+          "project": "ad-click-aggregator"
+        },
+        {
+          "kind": "project-deep",
+          "project": "ad-click-aggregator"
+        },
+        {
+          "kind": "project-read",
+          "project": "top-k"
+        },
+        {
+          "kind": "project-deep",
+          "project": "top-k"
+        },
+        {
+          "kind": "mock",
+          "title": "数据聚合三题动态 Mock 与修复",
+          "assignment": {
+            "focus": "在监控指标、广告点击和 YouTube Top K 中对比事件时间窗口、迟到/重复处理、基数与热点、精确聚合和近似算法的误差预算。",
+            "artifact": "一份随机主 Mock 和一张窗口聚合账本；逐题记录事件键、时间语义、窗口类型、水位线、幂等/去重、聚合状态、查询索引及允许误差。",
+            "acceptance": [
+              "能区分监控告警低延迟、广告计费不可丢/可对账、Top K 可近似三种正确性目标，不套用同一 exactly-once 方案。",
+              "对迟到事件、热门广告/高基数标签和滑动窗口分别给出状态增长、分片、重算或近似策略。",
+              "至少给出一个 reconciliation 作业和一个误差验证抽样，说明如何发现静默漏数而非只监控处理成功率。"
+            ],
+            "repair": "若窗口答案没有事件时间与水位线，先用跨分钟晚到点击反例逐事件计算；若近似算法无误差界，退回精确基线后再引入采样或 sketch。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.metrics-monitoring",
+                "heading": "4) How do we handle cardinality explosion?"
+              },
+              {
+                "source": "hi.breakdown.ad-click-aggregator",
+                "heading": "2) How can we ensure that we don't lose any click data?"
+              },
+              {
+                "source": "hi.breakdown.top-k",
+                "heading": "5) Can we make use of approximations to improve performance?"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "聚合系统主 Mock",
+                "instruction": "随机抽一题，量化事件率、标签/广告/视频基数、窗口和查询延迟，画摄取到查询的状态流。",
+                "minutes": 45
+              },
+              {
+                "title": "窗口与误差切题",
+                "instruction": "另两题各 15 分钟，回答水位线/迟到、去重/对账、Top K 近似误差中的核心问题。",
+                "minutes": 30
+              },
+              {
+                "title": "漏数与热点演练",
+                "instruction": "注入消费者重启、热门键和高基数标签，写数据偏差、告警、重放或聚合重建策略。",
+                "minutes": 40
+              },
+              {
+                "title": "数字化修复",
+                "instruction": "把所有“低延迟/高准确”改为具体 SLO 和误差界，用同一事件样本计算修复前后结果。",
+                "minutes": 45
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 11,
+      "theme": "周期任务、时序活动与派生视图",
+      "algorithm_block": "graphs",
+      "projects": [
+        "camelcamelcamel",
+        "strava"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "camelcamelcamel"
+        },
+        {
+          "kind": "project-deep",
+          "project": "camelcamelcamel"
+        },
+        {
+          "kind": "project-read",
+          "project": "strava"
+        },
+        {
+          "kind": "project-deep",
+          "project": "strava"
+        },
+        {
+          "kind": "integration",
+          "title": "调度、时间序列、Feed 与重算策略",
+          "assignment": {
+            "focus": "把 5 亿商品周期抓价与 1000 万并发活动采样统一到“原始事实→时序状态→派生视图”，同时保留不同的调度、离线写入、通知和排行榜语义。",
+            "artifact": "一张双系统时间轴与数据血缘图；标出商品轮询计划、价格变化、阈值通知、活动离线点、上传合并、好友实时流和排行榜重算。",
+            "acceptance": [
+              "商品调度能处理抓取频率分层、失败退避、重复价格样本和恶意扩展更新，且不会重复发送阈值通知。",
+              "活动链路能处理离线采样、设备时钟偏差、断点上传、重复 GPS 点和好友实时分享的不同新鲜度。",
+              "价格曲线与排行榜都给出原始事实保留、派生视图版本、回填/重算触发条件和重算期间的读策略。"
+            ],
+            "repair": "若派生表被当作唯一真相源，加入聚合 bug 需要全量重算的反例；指出可重放原始数据、版本化输出和双读校验后再设计。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.camelcamelcamel",
+                "heading": "3) How do we efficiently process price changes and notify subscribed users?"
+              },
+              {
+                "source": "hi.breakdown.strava",
+                "heading": "1) How can we support tracking activities while offline?"
+              },
+              {
+                "source": "ddia.ch12",
+                "heading": "事件时间与处理时间"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "两条事件时间轴",
+                "instruction": "逐事件画商品抓价到通知和离线 GPS 到活动保存，写事件时间、处理时间、去重键与权威原始记录。",
+                "minutes": 40
+              },
+              {
+                "title": "调度与上传背压",
+                "instruction": "为 5 亿商品分层轮询和 1000 万并发活动上传估算队列，设计退避、租约、批量与热点隔离。",
+                "minutes": 40
+              },
+              {
+                "title": "派生视图与通知",
+                "instruction": "定义价格曲线、阈值订阅、好友 Feed、排行榜的增量更新与幂等键，写允许的陈旧窗口。",
+                "minutes": 40
+              },
+              {
+                "title": "版本化重算演练",
+                "instruction": "模拟聚合逻辑错误，设计从原始事件回放到新版本视图、影子对比、切流和回滚的完整步骤。",
+                "minutes": 40
+              }
+            ]
+          }
+        },
+        {
+          "kind": "mock",
+          "title": "Price Tracking + Strava 双题 Mock",
+          "assignment": {
+            "focus": "随机完成价格追踪或运动活动主设计，并在切题追问中守住周期调度、离线优先、时序查询和派生通知的差异。",
+            "artifact": "一份 45 分钟主 Mock、30 分钟切题稿和一张事件质量评分表；评分表覆盖完整性、重复、乱序、时钟偏差、恶意输入和重算能力。",
+            "acceptance": [
+              "Price Tracking 能量化 5 亿商品的发现/轮询预算、通知扇出和价格图表查询；Strava 能量化并发活动、采样写入和实时分享。",
+              "每题至少回答两个深挖，并明确原始事件、派生状态、用户查询和失败恢复之间的数据流。",
+              "能处理一个客户端离线或恶意输入场景和一个后台任务迟到/重复场景，给出校验与补偿。"
+            ],
+            "repair": "若回答只关注正常数据流，从一次设备时间倒退或错误价格批次开始逆推；补质量规则、隔离区、可审计原始事件和视图重建后重录。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.camelcamelcamel",
+                "heading": "1) How do we efficiently discover and track 500 million Amazon products?"
+              },
+              {
+                "source": "hi.breakdown.strava",
+                "heading": "2) How can we scale to support 10 million concurrent activities?"
+              },
+              {
+                "source": "hi.senior.expectations",
+                "heading": "Depth"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "时序产品主 Mock",
+                "instruction": "随机抽一题，从规模估算、接口和数据模型到调度/上传、查询与通知完成设计。",
+                "minutes": 45
+              },
+              {
+                "title": "离线与调度切题",
+                "instruction": "另一题连续回答离线恢复、批量上传、周期轮询、任务重复和通知幂等。",
+                "minutes": 30
+              },
+              {
+                "title": "事件质量复盘",
+                "instruction": "逐段标记未处理重复、乱序、时钟偏差、恶意值或丢失的回答，并写用户可见错误。",
+                "minutes": 40
+              },
+              {
+                "title": "重算路径重录",
+                "instruction": "选最低分的派生视图段，从原始事实、版本化计算、校验、切流到回滚完整重答。",
+                "minutes": 45
+              }
+            ]
+          }
+        },
+        {
+          "kind": "repair",
+          "title": "迟到事件与派生数据复测",
+          "assignment": {
+            "focus": "通过跨天迟到价格与离线 GPS 批量补传，验证事件时间、水位线、去重和版本化派生视图能够给出确定结果。",
+            "artifact": "一组至少 12 个带 event_time、ingest_time、event_id 的测试事件，以及手算的价格曲线/活动统计期望结果和重放检查表。",
+            "acceptance": [
+              "测试集中同时出现重复、乱序、跨窗口迟到和客户端时钟偏差，并为每个事件写接受、隔离或修正决定。",
+              "增量结果与从原始事件全量重算结果一致；若允许近似或延迟修正，必须给出误差或修正可见时间。",
+              "通知和排行榜不会因重放重复产生外部副作用，使用业务幂等键并有审计查询证明。"
+            ],
+            "repair": "若手算结果不唯一，先固定时间语义、窗口闭合规则与去重键；若全量重算不一致，保留失败样本并定位第一个非确定派生步骤。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.camelcamelcamel",
+                "heading": "4) How do we serve fast price history queries for chart generation?"
+              },
+              {
+                "source": "hi.breakdown.strava",
+                "heading": "4) How can we expose a leaderboard of top athletes?"
+              },
+              {
+                "source": "ddia.ch12",
+                "heading": "处理滞留事件"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "构造迟到事件集",
+                "instruction": "写 12 个价格/GPS 事件，刻意加入重复、乱序、跨天迟到和时钟回拨，并标出预期接纳规则。",
+                "minutes": 30
+              },
+              {
+                "title": "手算增量结果",
+                "instruction": "按事件到达顺序更新价格曲线、活动统计或排行榜，记录每次状态变化与外部通知。",
+                "minutes": 50
+              },
+              {
+                "title": "全量重放对照",
+                "instruction": "从原始事实重新计算最终结果，定位增量与全量差异，补版本、水位线或幂等规则。",
+                "minutes": 40
+              },
+              {
+                "title": "变更窗口复测",
+                "instruction": "缩短允许迟到窗口并重新判断全部事件，解释用户可见修正、补偿和审计证据。",
+                "minutes": 40
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "week": 12,
+      "theme": "LLM 服务、GPU 调度与全路线 Capstone",
+      "algorithm_block": "dynamic-programming",
+      "projects": [
+        "chatgpt"
+      ],
+      "days": [
+        {
+          "kind": "project-read",
+          "project": "chatgpt"
+        },
+        {
+          "kind": "project-deep",
+          "project": "chatgpt"
+        },
+        {
+          "kind": "integration",
+          "title": "流式输出、队列与 GPU 调度",
+          "assignment": {
+            "focus": "从用户提交 prompt 到首 token、持续流式传输、取消请求和 GPU 回收，建立可排队、可抢占、可观测且不会让单个重用户垄断算力的完整状态机。",
+            "artifact": "一张请求/GPU 双状态机时序图，加一份容量预算；包含 admission、优先级队列、batch 形成、prefill/decode、SSE 断连、取消、超时与显存回收。",
+            "acceptance": [
+              "明确 TTFT、inter-token latency、队列等待和吞吐四项指标，能从并发数、平均 token 与 GPU batch 容量反推排队阈值。",
+              "普通/付费/重用户公平策略可执行：写权重或配额、饥饿保护、过载拒绝和客户端重试信息。",
+              "客户端断连或取消后，控制面能识别 run、传播 cancellation、停止调度并最终释放 GPU；遗漏清理有独立告警。"
+            ],
+            "repair": "若答案把流式输出等同于 SSE 协议，退回请求状态机，逐步演练断连发生在排队、prefill、decode 三个阶段的状态与资源结果。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.chatgpt",
+                "heading": "1) How do we stream tokens back to the client?"
+              },
+              {
+                "source": "hi.breakdown.chatgpt",
+                "heading": "3) How do we route and schedule generation requests across GPU workers?"
+              },
+              {
+                "source": "hi.breakdown.chatgpt",
+                "heading": "Cancelling a run and reclaiming the GPU"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "请求与流式状态机",
+                "instruction": "画 admitted、queued、running、streaming、cancelled、completed/failed 转移，写 run ID、序号与断线恢复/终止语义。",
+                "minutes": 40
+              },
+              {
+                "title": "GPU 容量与批调度",
+                "instruction": "用并发、prompt/output token、batch 与显存假设估算 TTFT；设计动态 batching、队列和 worker 选择。",
+                "minutes": 40
+              },
+              {
+                "title": "公平与过载保护",
+                "instruction": "为普通、付费和重用户制定可量化配额/权重，写饥饿保护、429/排队反馈和负载削减顺序。",
+                "minutes": 40
+              },
+              {
+                "title": "断连取消故障演练",
+                "instruction": "分别在排队、prefill、decode 注入取消或网关断线，逐项验证传播、重复请求、GPU 回收和告警。",
+                "minutes": 40
+              }
+            ]
+          }
+        },
+        {
+          "kind": "integration",
+          "title": "长上下文、缓存与推理成本",
+          "assignment": {
+            "focus": "为持续增长的会话设计上下文选择、摘要/截断、前缀缓存和历史持久化，量化成本节省同时防止用户感知的关键记忆丢失与缓存越权。",
+            "artifact": "一份三组会话 token 账单与上下文策略表；逐组列原始历史、保留/摘要/检索内容、缓存键、失效版本、输入成本、TTFT 与记忆质量检查。",
+            "acceptance": [
+              "至少比较滑动窗口、结构化摘要和按需检索三种策略，给出触发阈值、信息损失与适用会话。",
+              "前缀/KV 或响应缓存键包含模型、系统指令、租户/权限及版本；明确何时命中、何时绝不能跨用户复用。",
+              "用三组真实长度假设计算 token 与 GPU 时间变化，并设计关键事实召回率或任务完成率作为质量护栏。"
+            ],
+            "repair": "若成本优化只写“压缩上下文”，选一个包含用户约束和后续指代的长对话；逐句执行策略，证明保留依据并补缓存隔离测试。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.chatgpt",
+                "heading": "5) As conversations get longer, how do we control inference cost without making the assistant feel forgetful?"
+              },
+              {
+                "source": "hi.breakdown.chatgpt",
+                "heading": "2) Users should be able to view past chats and resume a conversation with context carried across turns"
+              },
+              {
+                "source": "hi.core.caching",
+                "heading": "Cache Consistency"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "三组会话成本基线",
+                "instruction": "为短、中、超长会话估算输入/输出 token、TTFT 和 GPU 占用，确定成本或延迟超标点。",
+                "minutes": 40
+              },
+              {
+                "title": "上下文选择策略",
+                "instruction": "分别应用截断、结构化摘要和检索，标出必须保留的用户事实、工具结果与安全约束。",
+                "minutes": 40
+              },
+              {
+                "title": "缓存键与隔离",
+                "instruction": "设计前缀/响应缓存键、版本和失效；用跨租户、模型升级、系统提示变更三个反例验证不会误命中。",
+                "minutes": 40
+              },
+              {
+                "title": "质量—成本验收",
+                "instruction": "计算优化前后成本与延迟，运行关键事实问答清单；任何质量护栏失败都触发降级或回退。",
+                "minutes": 40
+              }
+            ]
+          }
+        },
+        {
+          "kind": "integration",
+          "title": "官方 Agent 工程延伸与生产安全",
+          "assignment": {
+            "focus": "仅依据 OpenAI 与 Anthropic 官方资料，把单轮 LLM 调用扩展为可控工作流：先证明何时不需要 agent，再为路由、工具权限、评估与人工升级建立生产边界。",
+            "artifact": "一份 agent 决策记录和一张最小工作流图；包含是否使用 agent 的判据、模型/工具契约、权限、最大步数/成本、评估样本、停止条件和人工接管。",
+            "acceptance": [
+              "对一个确定性任务和一个开放任务分别论证 workflow/agent/普通代码的选择，不以“更智能”为理由。",
+              "每个工具写参数 schema、最小权限、超时、重试/幂等、敏感输出处理及需要人工确认的动作。",
+              "建立至少 10 条离线评估样本与生产护栏，覆盖任务成功、工具误用、循环、成本超限和高风险动作拦截。"
+            ],
+            "repair": "若流程只是“让模型自己决定”，将其拆成可观测节点，为每个节点补输入契约、预算和失败出口；无法评估的节点必须改回确定性代码或人工步骤。",
+            "source_refs": [
+              {
+                "source": "openai.building-agents",
+                "heading": "Orchestration"
+              },
+              {
+                "source": "openai.building-agents",
+                "heading": "Optimizing for production"
+              },
+              {
+                "source": "anthropic.building-effective-agents",
+                "heading": "When (and when not) to use agents"
+              },
+              {
+                "source": "anthropic.building-effective-agents",
+                "heading": "Workflow: Evaluator-optimizer"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "是否需要 Agent",
+                "instruction": "选两个任务，用确定性、开放度、反馈可得性和风险四项判据选择普通代码、workflow 或 agent，并记录反方理由。",
+                "minutes": 40
+              },
+              {
+                "title": "工具与权限契约",
+                "instruction": "为路由后的两个工具写 schema、最小权限、超时、幂等、确认点和敏感数据边界。",
+                "minutes": 40
+              },
+              {
+                "title": "评估器与停止条件",
+                "instruction": "建立 10 条样本、成功 rubric、最大步数/成本和 evaluator；定义低置信、高风险与循环时的人类升级。",
+                "minutes": 40
+              },
+              {
+                "title": "生产故障桌面演练",
+                "instruction": "注入工具超时、错误路由、提示注入和成本失控，逐项写阻断、审计、恢复及回归测试。",
+                "minutes": 40
+              }
+            ]
+          }
+        },
+        {
+          "kind": "mock",
+          "title": "ChatGPT Senior/Staff Live Mock",
+          "assignment": {
+            "focus": "完成一场不依赖背稿的 ChatGPT 系统设计，要求从产品约束推进到流式服务、GPU 调度、长上下文成本和跨区域故障，并主动管理取舍。",
+            "artifact": "一份 45 分钟完整录屏/逐分钟稿、一份追问答题纸和 Staff 评分表；评分表逐项引用回答证据而非主观印象。",
+            "acceptance": [
+              "前 20 分钟完成需求、数量级、API/实体和可运行 HLD，并明确聊天历史与生成运行的不同生命周期。",
+              "至少深入回答流式平滑、GPU 路由/公平、长上下文成本、取消回收中的三题；每题含数字、失败模式和指标。",
+              "主动提出一项跨区域或模型版本迁移风险，给出发布、回滚、数据兼容和用户会话连续性方案。"
+            ],
+            "repair": "若深挖被面试官多次提示，按首次提示点截断录像，重写该处的主动风险清单；24 小时内用不同容量参数重录相同 15 分钟。",
+            "source_refs": [
+              {
+                "source": "hi.breakdown.chatgpt",
+                "heading": "Potential Deep Dives"
+              },
+              {
+                "source": "hi.breakdown.chatgpt",
+                "heading": "Staff+"
+              },
+              {
+                "source": "hi.senior.expectations",
+                "heading": "Proactiveness"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "ChatGPT 完整 Live Mock",
+                "instruction": "严格计时完成需求、估算、接口、模型、HLD 与主动深挖；除澄清外不查看讲义。",
+                "minutes": 45
+              },
+              {
+                "title": "Senior/Staff 压力追问",
+                "instruction": "连续回答 GPU 热点、付费公平、上下文成本、取消泄漏和跨区域故障，追问必须落到状态或数字。",
+                "minutes": 30
+              },
+              {
+                "title": "证据评分",
+                "instruction": "按 breadth、depth、proactiveness 给每项定位录像时间戳，记录面试官提示和未闭环故障。",
+                "minutes": 40
+              },
+              {
+                "title": "最低分深挖重录",
+                "instruction": "仅重录最低分段，改变并发或 token 参数，要求主动识别瓶颈并给验收与回滚。",
+                "minutes": 45
+              }
+            ]
+          }
+        },
+        {
+          "kind": "repair",
+          "title": "30 题覆盖复盘与最终弱项复测",
+          "assignment": {
+            "focus": "用覆盖矩阵逐题核验 30 个项目的完整阅读、深挖证据和可复述能力，并对分层抽样暴露的唯一最弱机制做最终复测。",
+            "artifact": "一份 30 行覆盖审计表和 8 题分层抽样记录：每行写项目、完整通读证据、深挖产出、最后复述日期、一个核心不变量和一个待修项；抽样题附 3 分钟口述评分。",
+            "acceptance": [
+              "覆盖矩阵恰好 30 题且逐行核对，不允许用周级勾选代替；任何缺少通读或深挖证据的项目标为未完成并给补课日期。",
+              "8 题抽样至少覆盖基础设施、实时、媒体、交易、地理、搜索/聚合、时序和 LLM 八类，每题能在 3 分钟内讲清需求、HLD、深挖与故障修复。",
+              "从抽样中只选一个最低分机制，完成 15 分钟变参复测并留下前后评分、仍存缺口和下一次复习日期。"
+            ],
+            "repair": "若 30 行存在空证据，先补对应项目而非宣布毕业；若 8 题复述依赖提示，把失败机制映射到两个不同项目做对比复答，直至同一 rubric 达标。",
+            "source_refs": [
+              {
+                "source": "hi.senior.expectations",
+                "heading": "Breadth"
+              },
+              {
+                "source": "hi.senior.expectations",
+                "heading": "Depth"
+              },
+              {
+                "source": "hi.senior.expectations",
+                "heading": "Proactiveness"
+              },
+              {
+                "source": "ddia.ch13",
+                "heading": "信任但验证"
+              }
+            ],
+            "internal_resources": [
+              {
+                "href": "../coverage-matrix.html",
+                "label": "30 题覆盖矩阵"
+              },
+              {
+                "href": "../system-design-project-route.html",
+                "label": "12 周项目路线"
+              }
+            ],
+            "design_blocks": [
+              {
+                "title": "逐行审计 30 题",
+                "instruction": "打开覆盖矩阵和路线，逐题填通读、深挖、复述证据；记录恰好 30 行及所有缺口，不做周级合并。",
+                "minutes": 30
+              },
+              {
+                "title": "八类分层口述抽样",
+                "instruction": "从八类各抽一题，每题限时 3 分钟口述需求、主链路、一个深挖和一次故障修复，按统一 rubric 评分。",
+                "minutes": 50
+              },
+              {
+                "title": "唯一弱项变参复测",
+                "instruction": "选最低分机制，映射到两个不同项目；改变流量、故障或一致性参数，完成 15 分钟无提示对比复答。",
+                "minutes": 40
+              },
+              {
+                "title": "关闭缺口与设回访",
+                "instruction": "把缺证据项目排入具体补课日期，记录复测前后分数、未关闭阻塞与 2/7/21 天复习点，生成最终完成判定。",
+                "minutes": 40
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

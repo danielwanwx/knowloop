@@ -1,0 +1,139 @@
+{
+  "title": "地理空间索引",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "pipeline",
+  "width": 1500,
+  "summary": "半径搜索要的是圆形附近；一维 B-tree 只能给长条或矩形，空间索引用来先缩小候选，再精确算距离。",
+  "task": "查找用户 5 miles 内的餐厅，不能扫描几百万条经纬度记录。",
+  "constraints": [
+    "经纬度是一组二维坐标，不是两个互不相关的普通字段",
+    "半径查询的目标形状是圆形，普通范围扫描通常返回长条或矩形",
+    "索引负责缩小候选集，最终距离计算负责保证正确性"
+  ],
+  "qa": {
+    "chapter_category": "key-technology",
+    "content_size": "medium",
+    "source_kind": "Hello Interview geospatial indexes",
+    "expected_layout": "pipeline",
+    "coherence_pattern": "shape-mismatch",
+    "required_terms": ["圆形", "长条", "矩形", "候选", "精确距离"]
+  },
+  "blocks": [
+    {
+      "id": "query",
+      "kind": "question",
+      "title": "用户查询是一个圆",
+      "body": "用户问的是：以当前位置为圆心，5 miles 半径内有哪些餐厅？这是二维邻近搜索，不是普通字段过滤。",
+      "x": 70,
+      "y": 650,
+      "width": 390,
+      "height": 225
+    },
+    {
+      "id": "one_dim",
+      "kind": "warning",
+      "title": "普通 B-tree 只懂一维顺序",
+      "body": "latitude 和 longitude 分别建索引，只能按单个字段做范围扫描。它没有保存“地理上相近”的关系。",
+      "x": 555,
+      "y": 650,
+      "width": 390,
+      "height": 225
+    },
+    {
+      "id": "shape_mismatch",
+      "kind": "tradeoff",
+      "title": "核心问题：形状不匹配",
+      "body": "查询目标是圆形区域，但一维索引组合出来的是长条或外接矩形。形状错了，就会多取很多候选点。",
+      "x": 1040,
+      "y": 650,
+      "width": 390,
+      "height": 225
+    },
+    {
+      "id": "strip",
+      "kind": "warning",
+      "title": "先扫纬度会得到长条",
+      "body": "latitude 范围扫描会找出两条纬度之间的所有餐厅。这个长条可能横跨很远，大量点其实离用户很远。",
+      "x": 70,
+      "y": 1010,
+      "width": 390,
+      "height": 235
+    },
+    {
+      "id": "rectangle",
+      "kind": "warning",
+      "title": "两个范围相交仍是矩形",
+      "body": "latitude 和 longitude 的范围相交，只能得到 bounding box（外接矩形），不是目标圆形。",
+      "x": 555,
+      "y": 1010,
+      "width": 390,
+      "height": 235
+    },
+    {
+      "id": "overfetch",
+      "kind": "warning",
+      "title": "矩形里有很多误命中",
+      "body": "外接矩形会包含圆外的点。数据库仍要合并大结果集，再过滤掉不在半径内的 false positives（误命中）。",
+      "x": 1040,
+      "y": 1010,
+      "width": 390,
+      "height": 235
+    },
+    {
+      "id": "locality",
+      "kind": "component",
+      "title": "空间索引保留邻近关系",
+      "body": "R-tree 用 boxes 组织空间；geohash、S2、H3 把位置映射到 cell。目标是让地理上相近的点在索引里也更接近。",
+      "x": 70,
+      "y": 1375,
+      "width": 390,
+      "height": 255
+    },
+    {
+      "id": "candidates",
+      "kind": "component",
+      "title": "先查附近 boxes / cells",
+      "body": "把用户半径转换成覆盖的 boxes 或 cells，只读取这些区域里的餐厅。这样先把候选集压小。",
+      "x": 555,
+      "y": 1375,
+      "width": 390,
+      "height": 255
+    },
+    {
+      "id": "exact",
+      "kind": "answer",
+      "title": "最后做精确距离过滤",
+      "body": "boxes 和 cells 会故意多取边界点，所以还要用 haversine 或数据库 geography distance 计算真实距离、排序和分页。",
+      "x": 1040,
+      "y": 1375,
+      "width": 390,
+      "height": 255
+    }
+  ],
+  "connectors": [
+    {"from": "query", "to": "one_dim", "label": "普通索引"},
+    {"from": "one_dim", "to": "shape_mismatch", "label": "丢二维"},
+    {"from": "shape_mismatch", "to": "strip", "label": "首次失败"},
+    {"from": "strip", "to": "rectangle", "label": "再试相交"},
+    {"from": "rectangle", "to": "overfetch", "label": "仍过宽"},
+    {"from": "overfetch", "to": "locality", "label": "修正形状"},
+    {"from": "locality", "to": "candidates", "label": "缩小候选"},
+    {"from": "candidates", "to": "exact", "label": "保证正确"}
+  ],
+  "callouts": [
+    {
+      "id": "production_choice",
+      "kind": "note",
+      "title": "生产选择",
+      "body": "数据库原生地理查询用 PostGIS / GiST / R-tree 很自然；需要分片、缓存或搜索系统共用 key 时，geohash / S2 / H3 更容易落到工程边界上。"
+    },
+    {
+      "id": "principle",
+      "kind": "takeaway",
+      "title": "记忆原则",
+      "body": "空间索引负责缩小搜索范围，不负责替代最终距离计算。先少读，再算准。"
+    }
+  ],
+  "talk_track": "这个问题我不会把 latitude 和 longitude 当成两个普通字段分别建 B-tree。用户要的是 5 miles 内的圆形邻近搜索，而一维索引只能给长条；两个范围相交也只是外接矩形，里面会有很多圆外的误命中。所以我会用地理空间索引先缩小候选集：数据库原生查询可以用 PostGIS / GiST / R-tree，分片或搜索场景可以用 geohash、S2、H3 这类 cell-based 方案。关键是最后仍然要做精确距离过滤，因为空间索引负责少读候选，真实距离计算负责正确性。"
+}

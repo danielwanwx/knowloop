@@ -1,0 +1,435 @@
+{
+  "week": 7,
+  "theme": "市场数据、订单与地理调度",
+  "audio_preview": {
+    "title": "Week 7｜Robinhood 与 Uber 两分钟预听",
+    "script": "这一周把两种高频实时系统放在一起比较。Robinhood 的行情流允许短暂陈旧，却必须让订单状态和经纪商回报可追溯；Uber 的司机位置可以近似，却不能把同一司机同时承诺给两位乘客。学习时先为每个系统画两条不同语义的路径：Robinhood 的 market-data fanout 与 order lifecycle，Uber 的 location ingestion 与 ride matching。行情和位置都要面对热点、背压、断线重连和客户端续传，但正确性边界不同。订单应由幂等 command、单调状态机和外部回报驱动，任何超时都先查询已有状态，不能盲目重发；派单则以有 TTL 的 reservation 或条件更新锁住司机，再由可持久化工作流处理接受、拒绝、超时和重新匹配。容量扩展也不从“上 Kafka、做分片”开始，而从符号热度、地理密度、更新频率、消费者速度和过期窗口开始。最终 mock 要能主动回答三个问题：哪些数据允许旧、哪些动作绝不能重复、哪个指标证明系统正在失控。把这三个答案讲清楚，实时系统才从组件图变成可恢复的产品协议。"
+  },
+  "projects": [
+    {
+      "slug": "robinhood",
+      "title": "Robinhood",
+      "source": "hi.breakdown.robinhood",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Background: Financial Markets",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "The API",
+          "High-Level Design"
+        ],
+        "deliverable": "一张区分行情读取与订单写入的 Robinhood 白板：quote subscription、order command、broker callback、portfolio projection 与两条端到端时序。",
+        "acceptance": [
+          "明确行情允许的陈旧窗口与订单状态要求的正确性等级，不用一个一致性口号覆盖全系统。",
+          "订单 API 带 client_order_id，状态机能表达 pending、submitted、partial fill、filled、cancelled 和 rejected。",
+          "外部交易通道、权威订单库、事件日志与客户端 projection 的职责和失败语义清楚。"
+        ],
+        "repair": "若白板把行情和交易都塞进同一服务，先按读写语义拆成两条路径；逐跳标注 source of truth、幂等键、顺序号和断线后的恢复动作。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can the system scale up live price updates?",
+          "2) How does the system track order updates?",
+          "3) How does the system manage order consistency?",
+          "Some additional deep dives you might consider",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.robinhood",
+        "deliverable": "行情分区与 fanout、订单状态机、外部回报去重、partial fill/cancel race、热点降级和 reconciliation runbook。",
+        "acceptance": [
+          "断线重连能用 sequence/cursor 检测缺口并补读，而不是把 WebSocket 当成可靠日志。",
+          "订单重试、成交回报和取消竞争都有幂等规则与单调状态转换。",
+          "说明热门 ticker、慢消费者和经纪商故障时的背压、降级、恢复及可观测指标。"
+        ],
+        "repair": "若只会说 exactly once，改画 command、outbox、broker callback、dedupe ledger 和 projection 五步时序，并为每一步列重复、乱序和响应丢失处理。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "Server-Side Push/pull",
+          "why": "选择行情推送机制，并把连接可用性与数据完整性分开讨论。"
+        },
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "\"How do you maintain message ordering across distributed servers?\"",
+          "why": "为每个 symbol 或 account 定义顺序域与缺口恢复。"
+        },
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Optimistic Concurrency Control",
+          "why": "处理订单版本、取消与成交同时到达时的条件更新。"
+        },
+        {
+          "source": "hi.deep.kafka",
+          "heading": "Fault Tolerance and Durability",
+          "why": "让行情与订单事件可重放，同时说明副本并不自动消除重复。"
+        },
+        {
+          "source": "hi.deep.postgres",
+          "heading": "Data Consistency",
+          "why": "把订单状态转换、outbox 与账户投影放入可审计事务边界。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch8",
+          "heading": "防止丢失更新",
+          "why": "解释成交、取消与修改订单并发时为什么需要版本检查。"
+        },
+        {
+          "source": "ddia.ch10",
+          "heading": "线性一致性",
+          "why": "精确界定订单状态何时需要单一最新值，以及行情为什么通常不需要。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "传递事件流",
+          "why": "设计行情、订单回报和客户端投影之间可重放的事件通道。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "先把行情与订单分成两种语义",
+          "body": "Robinhood 不是一条“实时数据流”就能解释的系统。行情是外部交易所产生的高吞吐读模型，允许毫秒到秒级陈旧，重点是 fanout、顺序、断线补洞和慢消费者；订单是用户资金相关的命令，必须幂等、可审计，并由经纪商或交易场所的回报推动状态机。白板应从一开始画成两条路径，只在 symbol、account 和 portfolio projection 处交汇。这样才能分别选择缓存、流、事务和降级策略，也能避免为了行情吞吐牺牲订单正确性，或为了订单强一致把报价链路做得昂贵而脆弱。",
+          "takeaway": "先按业务语义拆路径，再为每条路径选择一致性和延迟目标。"
+        },
+        {
+          "title": "行情推送的可靠性来自序列与补读",
+          "body": "WebSocket 只解决服务器如何更快把报价送到客户端，不保证消息永不丢失。行情接入层应按 symbol 或 shard 维护单调 sequence，归一化不同交易所格式后写入可重放日志；fanout 节点把最新值推给订阅者，并对慢连接合并中间更新。客户端重连时提交最后 sequence，服务端从短期 replay buffer 补洞，超出保留窗口则返回 snapshot 再继续增量。热门 ticker 可以复制 fanout 状态或在边缘聚合，但必须监控 lag、drop、replay miss 和连接队列长度，防止“连接还活着、数据已经旧了”。",
+          "takeaway": "实时连接负责低延迟，sequence、snapshot 与 replay 才负责恢复。"
+        },
+        {
+          "title": "订单提交是一条幂等命令协议",
+          "body": "客户端提交订单时生成稳定的 client_order_id；API 在账户范围建立唯一约束，把命令和 outbox 事件原子写入。若响应丢失，重试应返回同一订单，而不是再次发送到 broker。后台发送器可以至少一次投递，但外部 adapter 与回调处理器都要按 broker_order_id、execution_id 去重。订单状态只能沿允许的边单调推进，重复或迟到回报保留审计记录却不能倒退状态。这样系统无需承诺无法证明的“网络 exactly once”，仍能让用户、客服和 reconciliation job 对同一笔意图得到一致结论。",
+          "takeaway": "幂等键、唯一约束、outbox 和去重账本共同形成可证明的一次业务效果。"
+        },
+        {
+          "title": "Partial fill 与取消是状态机竞争",
+          "body": "市场订单可能分多次成交，取消请求也可能与最后一笔成交同时在途。不能用一个布尔 status 覆盖这类竞争，而要保存 requested_qty、filled_qty、remaining_qty、version 以及每个 execution 的唯一标识。取消是“请求取消”，不是立即成功；只有交易场所确认后才进入 cancelled，期间到达的合法 fill 仍要累加。数据库用条件更新或事务验证旧 version，失败者重新读取并应用事件。面试回答还应说明余额和持仓是订单事件的派生投影，出现差异时以外部成交记录和不可变 ledger 对账，而不是手工覆盖最终数字。",
+          "takeaway": "资金系统的正确性靠显式状态转换和对账，不靠乐观描述。"
+        },
+        {
+          "title": "热点、慢消费者与背压",
+          "body": "市场波动时少数 symbol 会形成极端热点，生产速率也会突然超过客户端和 fanout 节点的消费能力。对行情可合并同一 symbol 的中间值，只保留最新报价；对订单事件则不能丢，只能扩容消费者、限制入口或把非关键投影延后。分区键不能只看平均负载，应监控 top symbol 的单分区带宽和连接数，并允许热点 symbol 独立拆分。客户端协议还要给出最大队列、降采样和“数据已过期”标记，宁可明确告诉用户行情延迟，也不能静默展示看似实时的旧价格。",
+          "takeaway": "背压策略必须按事件价值区分可合并数据与不可丢业务事件。"
+        },
+        {
+          "title": "Senior 主动讲外部故障与运营证据",
+          "body": "Robinhood 的关键依赖在系统边界之外：行情供应商可能断流，经纪商可能接受订单却让响应超时，回调可能重复或乱序。Senior 答案要为每种故障定义用户状态，例如 quote 标记 stale、订单显示 pending confirmation、取消显示 requested；同时启动限流、重试和 reconciliation，而不是猜测成功或失败。运营指标至少包含 market-data age、sequence gap、fanout lag、order submit latency、pending age、duplicate execution、reconciliation mismatch 和 broker error rate。报警应绑定业务风险，修复后还要能重放日志重建投影并证明没有漏单。每次事故复盘还应记录不变量是否被破坏、哪些投影需要重算，以及用户补救是否已经完成。",
+          "takeaway": "外部系统不可控，内部状态、指标与对账必须让不确定性可见且可恢复。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "WebSocket 断线后，如何证明用户没有错过关键行情更新？",
+          "trigger": "候选人只回答自动重连或心跳，没有说明数据缺口。",
+          "answer": "心跳只能证明连接在某个时刻可达，不能证明报价连续。我会给每个顺序域分配单调 sequence，客户端记录最后已应用值；重连时携带 cursor，服务端从短期 replay log 返回缺口。若 cursor 已超出保留窗口，则先返回带基准 sequence 的完整 snapshot，再继续增量。中间报价可按产品语义合并，但客户端必须知道当前 quote age，并在过旧时显示 stale，而不是继续渲染成实时价格。服务端监控 sequence gap、replay miss 和每连接 lag，才能量化恢复是否有效。",
+          "follow_up": "多个行情源的 sequence 互不兼容时，顺序域如何定义？",
+          "common_miss": "把连接恢复等同于数据恢复，忽略 snapshot 与陈旧标记。",
+          "repair": "画 disconnect → reconnect(cursor) → replay 或 snapshot → resume 的时序，并标出 sequence ownership。",
+          "sources": [
+            {
+              "source": "hi.breakdown.robinhood",
+              "heading": "1) How can the system scale up live price updates?"
+            },
+            {
+              "source": "hi.pattern.realtime-updates",
+              "heading": "\"How do you handle connection failures and reconnection?\""
+            }
+          ]
+        },
+        {
+          "question": "提交订单超时后，为什么不能直接重试到 broker？",
+          "trigger": "候选人把网络重试当成安全操作，没有业务幂等键。",
+          "answer": "超时意味着结果未知，而不是失败；第一次请求可能已经被 broker 接受。客户端必须复用同一 client_order_id，API 先查本地唯一记录，存在就返回当前状态，不再创建第二笔意图。对外发送由 outbox 驱动，adapter 保存 client_order_id 与 broker_order_id 的映射；重发时查询或使用对方支持的幂等键。若仍无法确认，订单保持 pending confirmation 并由 reconciliation 查询外部系统。只有明确 rejection 才允许用户以新意图提交，否则盲目重试可能造成重复买入和真实资金损失。",
+          "follow_up": "如果 broker 不支持幂等 key，也没有按 client ID 查询接口怎么办？",
+          "common_miss": "把 transport retry 和业务命令重试混为一谈。",
+          "repair": "列出响应成功、明确失败、超时未知三种结果及各自允许的下一步。",
+          "sources": [
+            {
+              "source": "hi.breakdown.robinhood",
+              "heading": "2) How does the system track order updates?"
+            },
+            {
+              "source": "ddia.ch9",
+              "heading": "故障与部分失效"
+            }
+          ]
+        },
+        {
+          "question": "成交回报与取消确认乱序到达，订单状态如何避免倒退？",
+          "trigger": "候选人用最后写入覆盖 status，或只依赖消息时间戳。",
+          "answer": "我会把订单建模为受约束状态机，而不是 last-write-wins 字段。每条外部回报带稳定 execution_id 或 event_id，处理器先去重，再在事务中读取 version、filled_qty 和当前状态；只有合法边才更新。取消请求进入 cancel_requested，不能立即覆盖已成交事实；迟到 fill 仍按唯一 execution 累加，cancelled 只说明剩余数量不再成交。若外部序列可用就保存其 sequence，否则以事件类型和数量不变量拒绝非法倒退，并把冲突送入 reconciliation 队列人工或自动核对。",
+          "follow_up": "如何从事件日志重建余额和持仓并验证结果？",
+          "common_miss": "认为“按时间排序”足以解决跨系统时钟和重复问题。",
+          "repair": "写出订单状态图和 filled_qty ≤ requested_qty 等不变量，再模拟三种乱序。",
+          "sources": [
+            {
+              "source": "hi.breakdown.robinhood",
+              "heading": "3) How does the system manage order consistency?"
+            },
+            {
+              "source": "ddia.ch8",
+              "heading": "防止丢失更新"
+            }
+          ]
+        },
+        {
+          "question": "为什么行情可以最终一致，而订单状态不能统一采用同样策略？",
+          "trigger": "候选人给整个系统贴上 AP 或 CP 标签。",
+          "answer": "一致性是按业务不变量选择的。行情是持续变化的观察值，短暂陈旧通常只影响体验，因此可读本地 replica、合并更新并在断线后补齐；但下单、取消和成交决定资金与持仓，重复或倒退会产生不可接受的业务错误，需要单账户或单订单范围内的条件写、唯一约束和审计日志。即使订单读模型异步更新，权威状态转换仍必须串行化。回答时我会分别给出 quote age、order pending age 和 reconciliation mismatch 的 SLO，而不是笼统声称所有数据都“强一致”。",
+          "follow_up": "portfolio 页面允许多旧，用户刚成交后的 read-your-writes 如何实现？",
+          "common_miss": "把数据库产品的 consistency level 当成业务正确性的完整答案。",
+          "repair": "为 quote、order、execution、portfolio 四类数据写允许陈旧窗口与 source of truth。",
+          "sources": [
+            {
+              "source": "hi.core.cap-theorem",
+              "heading": "Different Levels of Consistency"
+            },
+            {
+              "source": "hi.breakdown.robinhood",
+              "heading": "Senior"
+            }
+          ]
+        },
+        {
+          "question": "热门股票暴涨时，怎样防止一个 symbol 拖垮整个行情系统？",
+          "trigger": "候选人只说横向扩容，没有识别 hot partition 与慢消费者。",
+          "answer": "先用 per-symbol ingress rate、fanout subscriber count、partition lag 和 egress queue 找到瓶颈。分区层允许把热点 symbol 提升为独立分区或复制只读 fanout state；区域和进程内缓存减少重复编码与跨区传输。对行情事件可合并同一 symbol 的中间更新并限制每客户端刷新频率，但必须保留最新价格和 sequence；对订单相关事件绝不能用同样丢弃策略。若消费者持续落后，协议明确发送 snapshot-required 或 stale 标记，并优先保护订单入口和权威日志，而不是让无限队列耗尽内存。",
+          "follow_up": "热点从一个 symbol 快速转移到另一个时，动态拆分如何避免重排序？",
+          "common_miss": "只增加 Kafka partition，却没有迁移顺序域或消费者状态。",
+          "repair": "为单个热点 symbol 画 ingress、log、fanout、client 四级队列，并定义每级背压动作。",
+          "sources": [
+            {
+              "source": "hi.breakdown.robinhood",
+              "heading": "1) How can the system scale up live price updates?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Handling Bursts with Queues and Load Shedding"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "uber",
+      "title": "Uber",
+      "source": "hi.breakdown.uber",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 fare estimate、ride request、driver location、matching、reservation 与 trip lifecycle 的 Uber 白板。",
+        "acceptance": [
+          "位置更新、附近搜索和派单写入分成不同状态，陈旧位置不会被误认为权威司机可用性。",
+          "同一司机在并发请求下最多被一个 active reservation 占用，并有明确 TTL 与释放规则。",
+          "接受、拒绝、超时、重新匹配和行程开始均由可恢复状态机表达。"
+        ],
+        "repair": "如果设计只有 geo DB 加 WebSocket，补画 ride 与 driver 两个状态机，逐步标出 reservation、timeout、queue、idempotency 和用户可见状态。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we handle frequent driver location updates and efficient proximity searches on location data?",
+          "2) How can we manage system overload from frequent driver location updates while ensuring location accuracy?",
+          "3) How do we prevent multiple ride requests from being sent to the same driver simultaneously?",
+          "4) How can we ensure no ride requests are dropped during peak demand periods?",
+          "5) What happens if a driver fails to respond in a timely manner?",
+          "6) How can you further scale the system to reduce latency and improve throughput?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.uber",
+        "deliverable": "位置分层、geo index、司机 reservation、持久化派单队列、超时重匹配、geo-sharding 与跨边界 runbook。",
+        "acceptance": [
+          "能用 freshness、速度和密度调整位置上报，而不是固定频率淹没系统。",
+          "条件写或带 fencing 的短租约能阻止双重派单，并解释 TTL 到期竞争。",
+          "峰值请求进入可持久化队列，有 deadline、优先级、公平性和用户反馈。"
+        ],
+        "repair": "若回答“加锁加队列”就结束，补充锁的 owner/version/TTL、队列的 retry/deadline/dedupe，以及跨 geo cell 时的所有权转移。"
+      },
+      "concepts": [
+        {
+          "source": "hi.core.db-indexing",
+          "heading": "Geospatial Indexes",
+          "why": "把附近司机查询转换为候选集检索，再做精确距离过滤。"
+        },
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Conditional Writes",
+          "why": "用司机状态条件更新建立单一 reservation。"
+        },
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Managing Queue Backpressure",
+          "why": "处理高峰派单队列、deadline 与消费者扩容。"
+        },
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "Common Interview Scenarios",
+          "why": "为司机、乘客和 trip 状态选择推送与重连策略。"
+        },
+        {
+          "source": "hi.core.consistent-hashing",
+          "heading": "Addressing Hot Spots",
+          "why": "理解机场、球场等地理热点不能只靠均匀 hash 假设。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch7",
+          "heading": "倾斜的工作负载与缓解热点",
+          "why": "设计高密度 geo cell 的拆分、复制和动态所有权。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "分布式锁和租约",
+          "why": "分析司机 reservation 的 TTL、暂停和 fencing 风险。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "容错",
+          "why": "让派单工作流在 worker 或 region 故障后可恢复而不重复承诺。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "位置事实、可用性与行程状态必须分离",
+          "body": "司机最近一次位置只是带时间戳的观察值，不代表此刻仍空闲；available、reserved、on_trip 才是派单权威状态。位置链路可以高吞吐异步写入内存 geo index，定期持久化轨迹；司机可用性与 ride 状态则需要条件写和可审计转换。附近搜索先从位置索引取候选，再过滤 freshness、车型、司机状态和产品边界。若把所有字段写进同一高频行，不仅造成写热点，还容易让陈旧位置覆盖新的 reservation。清楚拆分三类状态后，系统才能同时获得低延迟搜索和双重派单防护。",
+          "takeaway": "地理坐标是候选信息，司机 reservation 才是承诺边界。"
+        },
+        {
+          "title": "高频位置上报需要自适应与分层",
+          "body": "固定每秒上报会在司机静止或低密度区域浪费带宽，却可能在高速行驶和接驾阶段不够新。客户端可依据速度、方向变化、前后台状态和 trip 阶段调整频率；接入层验证时间戳、设备与跳变，批量写入区域内存索引，并把较低频轨迹异步落盘。服务端用 location age 过滤过期司机，必要时向少量候选请求一次 fresh ping。过载时降低非活跃司机频率、合并中间点并保护派单状态写；不能静默接受任意旧位置，否则低延迟查询只会更快返回错误候选。",
+          "takeaway": "位置质量由 freshness 与产品阶段驱动，不由固定更新频率驱动。"
+        },
+        {
+          "title": "附近搜索是候选生成加精确过滤",
+          "body": "geo index 通常把二维空间映射为 cell、geohash 或树结构，先找当前及相邻区域的司机，随后用真实距离和 ETA 服务做精排。单纯按经纬度两个 B-tree 范围查询会产生矩形候选且难以稳定扩展。索引选择还要处理边界：司机跨 cell 时短暂双写或带版本迁移，查询邻居 cell 并按 driver_id 去重。机场等热点可以细分 cell 或复制只读位置，但权威 reservation 仍归一个 owner。搜索半径应逐级扩大，并把最大等待时间、ETA 误差和位置年龄作为可观测质量指标。",
+          "takeaway": "空间索引减少候选，精确距离、ETA 与状态过滤保证结果可用。"
+        },
+        {
+          "title": "派单靠短租约与 fencing 防双重承诺",
+          "body": "matching 服务为 ride 选择候选后，必须原子地把 driver 从 available 改为 reserved，并写 reservation_id、ride_id、version 和 expires_at。只有条件更新成功的请求才能通知司机；失败者重新选人。TTL 防止 worker 崩溃后永久占用，但旧 worker 可能在租约过期后恢复，所以后续 accept 必须携带 reservation version，权威服务拒绝过期 token。司机接受后再把 ride 与 driver 状态一起推进，拒绝或超时由持久化计时器释放。锁不是一个组件名，而是一份有 owner、期限和 fencing 的协议。还要审计过期租约、拒绝旧 token，并按区域观察 reservation 冲突和泄漏率。",
+          "takeaway": "TTL 解决泄漏，fencing/version 解决过期持有者复活。"
+        },
+        {
+          "title": "高峰派单需要有期限的持久化工作流",
+          "body": "演唱会散场时请求到达速度会超过可用司机和 matching worker。入口先创建幂等 ride request 并返回 searching 状态，再写入可持久化队列；任务带区域、创建时间、服务等级和 deadline。消费者按区域供需与等待时间调度，失败使用有上限的退避，超过 deadline 明确通知用户而不是无限排队。司机超时后工作流记录尝试历史并选择下一候选，防止同一司机被频繁骚扰。队列长度、oldest age、match success、attempt count 和 cancel rate 共同决定扩容、限流与产品降级。",
+          "takeaway": "队列保存需求，但公平性、deadline 和用户反馈决定它是不是可用产品。"
+        },
+        {
+          "title": "Geo-sharding 的难点是边界与热点",
+          "body": "按城市或 geo cell 分区能把位置、匹配和通知留在低延迟区域，也便于独立扩容。但司机与乘客会跨边界，机场和市中心又会产生极端偏斜。设计应给每个实体一个 home region 和带版本的所有权转移协议；边界查询读取邻近 cell，候选去重后由权威 owner 执行 reservation。热点 cell 可以动态细分或给位置索引增加只读副本，但 ride 状态不能被多个 shard 同时写。跨区故障时宁可短暂扩大 ETA 或暂停新匹配，也不能以陈旧 ownership 造成双重派单。",
+          "takeaway": "地理分区降低延迟，所有权与边界协议守住正确性。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "司机位置多旧仍可用于派单，如何决定？",
+          "trigger": "候选人只说实时位置，没有 freshness budget 或用户后果。",
+          "answer": "我会按 trip 阶段和速度定义 freshness SLO，而不是一个全局秒数。空闲静止司机可以较低频更新，正在接驾或高速移动时要求更短窗口。geo 查询返回 location_timestamp，matching 先过滤超过阈值的候选，并对少量最优司机发 fresh ping；无法及时确认就不建立 reservation。系统监控位置年龄分布、fresh ping 成功率、ETA 误差和因陈旧被过滤比例。过载时可以减少远端候选、扩大等待时间，却不能把未知位置伪装成准确位置。",
+          "follow_up": "客户端时间不可信时，位置事件的时间戳如何处理？",
+          "common_miss": "只提高更新频率，忽略电量、带宽和入口过载。",
+          "repair": "按 idle、searching、reserved、on_trip 四阶段写频率、freshness 和降级表。",
+          "sources": [
+            {
+              "source": "hi.breakdown.uber",
+              "heading": "2) How can we manage system overload from frequent driver location updates while ensuring location accuracy?"
+            },
+            {
+              "source": "ddia.ch9",
+              "heading": "不可靠的时钟"
+            }
+          ]
+        },
+        {
+          "question": "两个 matching worker 同时选中同一司机，如何保证只发出一个有效邀请？",
+          "trigger": "候选人说“Redis lock”但没有 owner、TTL 或失效竞争。",
+          "answer": "候选生成可以并发，但承诺点必须是权威 driver 状态上的条件写：仅当 status=available 且 version=v 时，写入 reserved、ride_id、reservation_id、expires_at 和 version=v+1。只有成功者发送邀请。若使用外部租约，也要把 fencing token 写进后续 accept 请求，防止旧 worker 在 TTL 过期后复活。拒绝、超时和取消只能由匹配 reservation_id/version 的操作释放，避免旧 timer 清除新租约。这样即使通知重复，司机端和服务端也只承认当前 token。",
+          "follow_up": "条件写成功但通知发送失败，司机何时重新可用？",
+          "common_miss": "把互斥锁当成永不失效的魔法，忽略旧持有者与定时器。",
+          "repair": "画两个 worker 竞争、winner 崩溃、TTL 到期、旧 worker 恢复的时序。",
+          "sources": [
+            {
+              "source": "hi.breakdown.uber",
+              "heading": "3) How do we prevent multiple ride requests from being sent to the same driver simultaneously?"
+            },
+            {
+              "source": "ddia.ch9",
+              "heading": "分布式锁和租约"
+            }
+          ]
+        },
+        {
+          "question": "高峰期把所有 ride request 放进队列就不会丢了吗？",
+          "trigger": "候选人把 durable queue 等同于完整派单语义。",
+          "answer": "队列只能持久化任务，仍需定义幂等、deadline、顺序和用户状态。入口以 client_request_id 去重并创建 searching 记录，消息只携带 ride_id；消费者每次执行前读取当前状态，已取消或已匹配就安全跳过。任务有最大等待时间与区域优先级，失败使用有上限退避，超过 deadline 转为 no_driver_available 并通知用户。队列积压时显示预计等待、限制新请求或调整范围，不能无限隐藏延迟。必须监控 oldest message age、redelivery、match success 和取消率。",
+          "follow_up": "同一区域如何在高价值订单与等待最久用户之间保持公平？",
+          "common_miss": "只讨论消息不丢，没有讨论业务任务是否还有效。",
+          "repair": "为消息写出 dedupe key、deadline、retry limit、terminal state 和用户通知。",
+          "sources": [
+            {
+              "source": "hi.breakdown.uber",
+              "heading": "4) How can we ensure no ride requests are dropped during peak demand periods?"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Managing Queue Backpressure"
+            }
+          ]
+        },
+        {
+          "question": "司机没有及时响应，为什么不能简单等 TTL 后再选下一位？",
+          "trigger": "候选人没有考虑延迟任务、重复 timer 和迟到接受。",
+          "answer": "TTL 只是 reservation 的有效期，还需要可靠触发重新匹配。创建 reservation 时同时安排带 reservation_id/version 的 durable timer；到期 worker 条件检查仍为当前 reservation 且未接受，才释放司机并推进下一候选。司机迟到 accept 必须携带 token，若版本已变化就返回 expired，而不能重新占用。timer 至少一次执行，所以处理必须幂等；服务重启后可从到期索引或延迟队列恢复。产品还要限制每次等待和总尝试时间，让乘客看到 searching、retrying 或失败的明确状态。",
+          "follow_up": "延迟队列不可用时，如何从数据库恢复所有到期 reservation？",
+          "common_miss": "依赖进程内 timer，崩溃后任务永久消失。",
+          "repair": "模拟 timer 重复、worker 崩溃和 accept 迟到三种情况，验证 version 条件。",
+          "sources": [
+            {
+              "source": "hi.breakdown.uber",
+              "heading": "5) What happens if a driver fails to respond in a timely manner?"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Handling Failures"
+            }
+          ]
+        },
+        {
+          "question": "按 geo cell 分片后，司机跨边界时如何避免消失或被重复匹配？",
+          "trigger": "候选人只说 geohash 分片，没有所有权迁移协议。",
+          "answer": "位置索引可以在边界短暂双写以保证候选可见，但 driver reservation 必须有单一权威 owner。司机跨 cell 时，新 owner 以 driver_id 和递增 epoch 接管，旧 owner 看到更高 epoch 后停止写；查询相邻 cell 后按 driver_id 去重，并把 reservation 请求路由到当前 owner。迁移期间若无法确认 ownership，宁可暂不把司机作为候选。事件携带 epoch，迟到位置更新和旧 shard 的释放操作都会被拒绝。系统监控 ownership conflict、跨 cell 查询比例和迁移时延，热点区域再动态细分。",
+          "follow_up": "整个 region 故障时，备用 region 如何安全接管尚未过期的 reservation？",
+          "common_miss": "把候选数据复制与写所有权混为一谈。",
+          "repair": "画 old cell、新 cell、owner directory 和 reservation store 的 epoch 迁移时序。",
+          "sources": [
+            {
+              "source": "hi.breakdown.uber",
+              "heading": "6) How can you further scale the system to reduce latency and improve throughput?"
+            },
+            {
+              "source": "ddia.ch7",
+              "heading": "倾斜的工作负载与缓解热点"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

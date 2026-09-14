@@ -1,0 +1,64 @@
+{
+  "title": "CAP Partition Tradeoff",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "comparison",
+  "summary": "CAP 的实际取舍是在网络分区发生时选择更重视一致性还是可用性。",
+  "task": "在非功能需求阶段，先问系统在分区时更怕旧数据，还是更怕请求失败。",
+  "constraints": [
+    "分区容错在分布式系统里是默认必须处理的",
+    "不同功能可以有不同选择：下单偏 CP，浏览偏 AP",
+    "一致性选择会影响数据库、缓存、复制和降级策略"
+  ],
+  "blocks": [
+    {
+      "id": "cp",
+      "lane": "left",
+      "kind": "component",
+      "title": "偏 CP：错误状态代价高",
+      "body": "锁座、库存、支付这类写路径中，旧数据会造成真实损失。系统宁可等待、降级或拒绝请求，也不能确认错误状态。"
+    },
+    {
+      "id": "cp-design",
+      "lane": "left",
+      "kind": "component",
+      "title": "CP 侧设计动作",
+      "body": "设计上会用条件写、事务协调、单主写入或强一致读。重点不是追求绝对低延迟，而是让关键状态只有一个可信结果。"
+    },
+    {
+      "id": "cp-cost",
+      "lane": "left",
+      "kind": "caveat",
+      "title": "CP 的代价",
+      "body": "代价是延迟更高、可用性更低，跨区域协调也更贵。这个选择会直接影响降级、超时和重试策略。"
+    },
+    {
+      "id": "ap",
+      "lane": "right",
+      "kind": "component",
+      "title": "偏 AP：新鲜度只是体验问题",
+      "body": "活动浏览、评论、推荐或资料页中，短时间旧数据通常比失败页面更可接受。系统继续服务请求，并让副本最终收敛。"
+    },
+    {
+      "id": "ap-design",
+      "lane": "right",
+      "kind": "component",
+      "title": "AP 侧设计动作",
+      "body": "设计上会用异步复制、多副本读、CDC 推送缓存或搜索索引。重点是保证最终一致，并让客户端知道读到旧值是否可接受。"
+    },
+    {
+      "id": "ap-cost",
+      "lane": "right",
+      "kind": "caveat",
+      "title": "AP 的代价",
+      "body": "代价不是没有一致性问题，而是把问题推到冲突修复、stale read 和产品语义上。这个边界需要在需求阶段说清楚。"
+    }
+  ],
+  "callouts": [
+    {
+      "title": "功能级取舍",
+      "body": "CAP 选择不必在整个系统上统一。会造成真实损失的写路径偏 CP，只影响体验的新鲜度问题通常偏 AP。"
+    }
+  ],
+  "talk_track": "这个问题我会先把 P 当成必然存在的约束，然后问一致性和可用性谁更重要。比如 Ticketmaster 下单不能双卖座位，我会牺牲可用性；但浏览活动详情时，旧数据比失败页面更可接受。"
+}

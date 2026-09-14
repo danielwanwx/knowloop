@@ -1,0 +1,4 @@
+interface:
+  display_name: "System Design Study Coach"
+  short_description: "Daily coach for the verified 12-week system design plan"
+  default_prompt: "Use $system-design-study-coach to give me today's assignment, check my artifact, and create repair tasks if I miss the rubric."

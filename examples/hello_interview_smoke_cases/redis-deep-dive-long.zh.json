@@ -1,0 +1,58 @@
+{
+  "title": "Redis Deep Dive: When It Is More Than A Cache",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "concept-map",
+  "summary": "Redis 的设计价值不只是快，还包括数据结构、TTL、原子操作和集群分片的取舍。",
+  "task": "判断 Redis 在设计里是缓存、计数器、排行榜、会话存储，还是临时协调组件。",
+  "constraints": [
+    "内存系统很快，但容量和成本有限，不能当无限数据库用",
+    "TTL、eviction、持久化和复制策略决定数据丢失窗口",
+    "Cluster 分片提升容量，但跨 key 事务和热 key 会变难"
+  ],
+  "blocks": [
+    {
+      "id": "center",
+      "kind": "component",
+      "title": "Define Redis' role before using it",
+      "body": "Redis 角色必须明确：缓存、计数器、排行榜，或短期状态存储。不同角色对应不同丢失语义和恢复策略。"
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "title": "Cache when data can be rebuilt",
+      "body": "缓存适合 profile、feed、API response 这类可回源数据。重点是 TTL、失效策略，以及缓存挂了是否能降级。"
+    },
+    {
+      "id": "counter",
+      "kind": "component",
+      "title": "Atomic counters need clear ownership",
+      "body": "限流、库存 hold 计数和幂等 guard 可以利用 Redis 原子操作。但如果计数不能丢，就要有持久化兜底。"
+    },
+    {
+      "id": "rank",
+      "kind": "component",
+      "title": "Sorted sets are for ordered access",
+      "body": "排行榜、top items、时间排序队列适合 sorted set。排序维度和更新频率决定写入成本、读取模式和过期策略。"
+    },
+    {
+      "id": "session",
+      "kind": "component",
+      "title": "Ephemeral state must define loss behavior",
+      "body": "会话和临时状态可以有过期时间，但要说清楚 Redis 丢失时用户体验是什么。能重登和不能丢单是两种设计。"
+    },
+    {
+      "id": "cluster",
+      "kind": "caveat",
+      "title": "Cluster adds scale but weakens simple assumptions",
+      "body": "Cluster 能提高容量，但跨 key 操作、事务和 hot key 会更难。这里要提前说明 key 设计和降级策略。"
+    }
+  ],
+  "callouts": [
+    {
+      "title": "Senior lens",
+      "body": "Say what Redis is allowed to lose. If loss is unacceptable, pair it with durable storage or a log."
+    }
+  ],
+  "talk_track": "Redis 我不会只说“加缓存”。我会先定义它在系统里的角色：是缓存、原子计数器、排行榜，还是短期状态。不同角色决定 TTL、持久化和故障策略。如果 Redis 里的状态不能丢，就必须有数据库或日志兜底；如果只是缓存，Redis 挂了也应该能降级回源。"
+}

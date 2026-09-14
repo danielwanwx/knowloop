@@ -1,0 +1,43 @@
+{
+  "name": "crack-system-interview-skill",
+  "version": "0.10.0",
+  "description": "Interview coaching across coding, design, fundamentals, data, behavioral questions and resume deep dives, with private evidence and retests.",
+  "author": {
+    "name": "Crack System Interview contributors",
+    "url": "https://knowloop.example"
+  },
+  "homepage": "https://knowloop.example",
+  "repository": "https://knowloop.example",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "skill",
+    "plugin",
+    "interview",
+    "system-design",
+    "excalidraw"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Crack System Interview",
+    "shortDescription": "Learn, attempt, repair, and resume across interview topics.",
+    "longDescription": "Interview coaching across coding, design, fundamentals, data, behavioral questions and resume deep dives, with private evidence and retests. Start with interview-coach; use the course, diagrams and example scripts only when needed.",
+    "developerName": "Crack System Interview contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Multilingual",
+      "Excalidraw",
+      "Interview Prep",
+      "Study Notes",
+      "Diagramming",
+      "Study Coach"
+    ],
+    "defaultPrompt": [
+      "Use $interview-coach to continue my last practice.",
+      "使用 $interview-coach，追问我简历中的一个项目。",
+      "Use $interview-coach for an algorithms mock interview."
+    ],
+    "brandColor": "#2563EB"
+  },
+  "mcpServers": "./.mcp.json"
+}

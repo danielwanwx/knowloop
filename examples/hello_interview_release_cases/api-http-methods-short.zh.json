@@ -1,0 +1,52 @@
+{
+  "title": "HTTP Methods 的 API 契约",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "decision",
+  "summary": "HTTP method 的核心不是背动词，而是表达资源操作和重试语义。",
+  "task": "给事件订票系统设计 REST API 时，选择 GET、POST、PUT、PATCH、DELETE 的边界。",
+  "constraints": [
+    "客户端和网关会因为网络失败重试请求",
+    "创建 booking 不能因为一次 retry 产生重复订单",
+    "更新接口要让调用方知道是整体替换还是局部修改"
+  ],
+  "qa": {
+    "chapter_category": "api-design",
+    "content_size": "short",
+    "source_kind": "Hello Interview API design short concept",
+    "expected_layout": "decision"
+  },
+  "blocks": [
+    {
+      "id": "read",
+      "kind": "component",
+      "title": "GET 只读且可安全重试",
+      "body": "GET `/events/{id}` 或 `/events` 只取数据，不改变服务器状态。缓存、预取和重复调用都不应该产生副作用。"
+    },
+    {
+      "id": "create",
+      "kind": "component",
+      "title": "POST 创建新资源",
+      "body": "POST `/events/{id}/bookings` 表达创建 booking，由服务端分配 id。它默认不是幂等的，所以生产里常配 idempotency key。"
+    },
+    {
+      "id": "replace",
+      "kind": "component",
+      "title": "PUT 替换，PATCH 局部改",
+      "body": "PUT `/users/{id}` 更适合完整替换资源，PATCH 更适合只改 email 或 preference。PATCH 是否幂等取决于 patch 语义。"
+    },
+    {
+      "id": "delete",
+      "kind": "component",
+      "title": "DELETE 结果幂等",
+      "body": "DELETE `/bookings/{id}` 可以返回 204 或后续 404，但最终状态都是资源不存在。设计上要区分最终状态和单次响应码。"
+    }
+  ],
+  "callouts": [
+    {
+      "title": "重试是关键",
+      "body": "方法选择真正影响的是失败重试、缓存、幂等和客户端 contract。"
+    }
+  ],
+  "talk_track": "这个问题我不会只背 GET、POST、PUT、PATCH、DELETE 的定义，而是先看这个接口对资源状态有没有副作用，以及失败后能不能安全重试。比如查询 event 用 GET，创建 booking 用 POST，但为了避免网络 retry 产生重复订单，我会配 idempotency key。完整替换 profile 用 PUT，局部更新 email 用 PATCH，而 DELETE 的幂等性看最终状态：资源已经不存在就可以。"
+}

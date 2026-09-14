@@ -1,0 +1,64 @@
+{
+  "title": "Delivery Framework Flow",
+  "language": "English",
+  "style": "excalidraw-plus",
+  "layout": "pipeline",
+  "summary": "A strong system design answer needs a clear sequence from scope to deep dives.",
+  "task": "Turn an ambiguous product prompt into requirements, estimates, architecture, and focused technical depth.",
+  "constraints": [
+    "Time is limited, so the answer needs a track to run on",
+    "Requirements should narrow the design before components are drawn",
+    "Depth should be spent on the riskiest parts, not evenly across everything"
+  ],
+  "qa": {
+    "chapter_category": "framework",
+    "content_size": "short",
+    "source_kind": "Hello Interview In a Hurry framework chapter",
+    "expected_layout": "pipeline"
+  },
+  "blocks": [
+    {
+      "id": "scope",
+      "kind": "component",
+      "title": "Clarify scope first",
+      "body": "Start by pinning down users, core actions, and explicit non-goals. This prevents spending design time on features the system does not need."
+    },
+    {
+      "id": "requirements",
+      "kind": "component",
+      "title": "Functional + non-functional requirements",
+      "body": "Separate what the product must do from qualities like consistency, latency, scale, and availability. These qualities drive the architecture."
+    },
+    {
+      "id": "model",
+      "kind": "database",
+      "title": "Data model reveals boundaries",
+      "body": "Core entities and relationships expose where ownership, indexing, and consistency boundaries should live. The model should support the main flows."
+    },
+    {
+      "id": "design",
+      "kind": "service",
+      "title": "High-level design connects flows",
+      "body": "Draw the minimum services, storage, cache, queues, and APIs needed to satisfy the requirements. Keep the diagram readable before going deep."
+    },
+    {
+      "id": "deepdive",
+      "kind": "warning",
+      "title": "Deep dive on the highest-risk piece",
+      "body": "Spend depth where failure would break the product: consistency, hot keys, fanout, idempotency, recovery, or cost. Do not distribute depth evenly."
+    }
+  ],
+  "connectors": [
+    {"from": "scope", "to": "requirements", "label": "narrow problem"},
+    {"from": "requirements", "to": "model", "label": "derive entities"},
+    {"from": "model", "to": "design", "label": "draw flows"},
+    {"from": "design", "to": "deepdive", "label": "choose risk"}
+  ],
+  "callouts": [
+    {
+      "title": "Why this matters",
+      "body": "The framework is not ceremony; it protects time and makes tradeoffs explicit before implementation details take over."
+    }
+  ],
+  "talk_track": "For a framework-style chapter, I would make the answer procedural but still concrete. I would first clarify scope and requirements, then use the data model to expose ownership and consistency boundaries. After that I would draw a readable high-level design and choose one or two risky areas for depth, such as idempotency, hot keys, fanout, or recovery. The important part is not following steps mechanically; it is using the steps to spend time on the decisions that change the architecture."
+}

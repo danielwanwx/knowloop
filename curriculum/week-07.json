@@ -1,0 +1,889 @@
+{
+  "schema_version": "2.0",
+  "week": 7,
+  "theme": "市场数据、订单与地理调度",
+  "algorithm_block": "trees",
+  "projects": [
+    {
+      "slug": "robinhood",
+      "title": "Robinhood",
+      "complete_read_day": 1,
+      "deep_dive_day": 2
+    },
+    {
+      "slug": "uber",
+      "title": "Uber",
+      "complete_read_day": 3,
+      "deep_dive_day": 4
+    }
+  ],
+  "audio_preview": {
+    "title": "Week 7｜Robinhood 与 Uber 两分钟预听",
+    "script": "这一周把两种高频实时系统放在一起比较。Robinhood 的行情流允许短暂陈旧，却必须让订单状态和经纪商回报可追溯；Uber 的司机位置可以近似，却不能把同一司机同时承诺给两位乘客。学习时先为每个系统画两条不同语义的路径：Robinhood 的 market-data fanout 与 order lifecycle，Uber 的 location ingestion 与 ride matching。行情和位置都要面对热点、背压、断线重连和客户端续传，但正确性边界不同。订单应由幂等 command、单调状态机和外部回报驱动，任何超时都先查询已有状态，不能盲目重发；派单则以有 TTL 的 reservation 或条件更新锁住司机，再由可持久化工作流处理接受、拒绝、超时和重新匹配。容量扩展也不从“上 Kafka、做分片”开始，而从符号热度、地理密度、更新频率、消费者速度和过期窗口开始。最终 mock 要能主动回答三个问题：哪些数据允许旧、哪些动作绝不能重复、哪个指标证明系统正在失控。把这三个答案讲清楚，实时系统才从组件图变成可恢复的产品协议。",
+    "provider": "ElevenLabs",
+    "voice": "Siqi Liu - Calm, Warm and Gentle",
+    "model": "Eleven v3",
+    "auto_generate": false
+  },
+  "days": [
+    {
+      "week": 7,
+      "day": 1,
+      "kind": "project-read",
+      "title": "Robinhood · 完整通读",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "问题框定",
+          "instruction": "先写 FR/NFR、容量假设和不做什么；暂不画扩展组件。",
+          "minutes": 30
+        },
+        {
+          "title": "连续完整通读",
+          "instruction": "从 Understanding/Understand the Problem 按原文顺序读到 High-Level Design：Robinhood。",
+          "minutes": 80
+        },
+        {
+          "title": "关页重建",
+          "instruction": "不看答案重画 API、数据模型、读写路径和权威状态。",
+          "minutes": 30
+        },
+        {
+          "title": "验收与修复",
+          "instruction": "逐条核对验收标准；不通过就执行当天 repair，不用补读掩盖。",
+          "minutes": 20
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Understanding the Problem",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#understanding-the-problem"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Background: Financial Markets",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#background-financial-markets"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Non-Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#non-functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "The Set Up",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#the-set-up"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Planning the Approach",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#planning-the-approach"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Defining the Core Entities",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#defining-the-core-entities"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "The API",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#the-api"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "High-Level Design",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#high-level-design"
+        }
+      ],
+      "artifact": "一张区分行情读取与订单写入的 Robinhood 白板：quote subscription、order command、broker callback、portfolio projection 与两条端到端时序。",
+      "acceptance": [
+        "明确行情允许的陈旧窗口与订单状态要求的正确性等级，不用一个一致性口号覆盖全系统。",
+        "订单 API 带 client_order_id，状态机能表达 pending、submitted、partial fill、filled、cancelled 和 rejected。",
+        "外部交易通道、权威订单库、事件日志与客户端 projection 的职责和失败语义清楚。"
+      ],
+      "repair": "若白板把行情和交易都塞进同一服务，先按读写语义拆成两条路径；逐跳标注 source of truth、幂等键、顺序号和断线后的恢复动作。",
+      "algorithms": {
+        "tag": "Trees",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Invert Binary Tree",
+            "slug": "invert-binary-tree",
+            "url": "https://leetcode.com/problems/invert-binary-tree/"
+          },
+          {
+            "title": "Maximum Depth of Binary Tree",
+            "slug": "maximum-depth-of-binary-tree",
+            "url": "https://leetcode.com/problems/maximum-depth-of-binary-tree/"
+          },
+          {
+            "title": "Diameter of Binary Tree",
+            "slug": "diameter-of-binary-tree",
+            "url": "https://leetcode.com/problems/diameter-of-binary-tree/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 7,
+      "day": 2,
+      "kind": "project-deep",
+      "title": "Robinhood · Deep Dive 与 Senior 修复",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "Deep Dives",
+          "instruction": "围绕 Robinhood 逐个回答机制、规模阈值和失败语义。",
+          "minutes": 50
+        },
+        {
+          "title": "精确补课",
+          "instruction": "只读今天列出的 Core / Technology / Pattern / DDIA 小节。",
+          "minutes": 30
+        },
+        {
+          "title": "Senior/Staff 追问",
+          "instruction": "先口述回答，再对照详细答案；为每个追问写证据。",
+          "minutes": 40
+        },
+        {
+          "title": "故障注入与修复",
+          "instruction": "把超时、重复、乱序、热点或部分失败注入白板后重答。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Potential Deep Dives",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#potential-deep-dives"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "1) How can the system scale up live price updates?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#1-how-can-the-system-scale-up-live-price-updates"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "2) How does the system track order updates?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#2-how-does-the-system-track-order-updates"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "3) How does the system manage order consistency?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#3-how-does-the-system-manage-order-consistency"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Some additional deep dives you might consider",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#some-additional-deep-dives-you-might-consider"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "What is Expected at Each Level?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#what-is-expected-at-each-level"
+        },
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "Senior",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#senior"
+        },
+        {
+          "source_id": "hi.pattern.realtime-updates",
+          "page_title": "Real-time Updates",
+          "heading": "Server-Side Push/pull",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/realtime-updates#server-side-pushpull"
+        },
+        {
+          "source_id": "hi.pattern.realtime-updates",
+          "page_title": "Real-time Updates",
+          "heading": "\"How do you maintain message ordering across distributed servers?\"",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/realtime-updates#how-do-you-maintain-message-ordering-across-distributed-servers"
+        },
+        {
+          "source_id": "hi.pattern.dealing-with-contention",
+          "page_title": "Dealing with Contention",
+          "heading": "Optimistic Concurrency Control",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/dealing-with-contention#optimistic-concurrency-control"
+        },
+        {
+          "source_id": "hi.deep.kafka",
+          "page_title": "Kafka",
+          "heading": "Fault Tolerance and Durability",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/kafka#fault-tolerance-and-durability"
+        },
+        {
+          "source_id": "hi.deep.postgres",
+          "page_title": "PostgreSQL",
+          "heading": "Data Consistency",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/postgres#data-consistency"
+        },
+        {
+          "source_id": "ddia.ch8",
+          "page_title": "8 事务",
+          "heading": "防止丢失更新",
+          "url": "https://ddia.vonng.com/ch8/#sec_transactions_lost_update"
+        },
+        {
+          "source_id": "ddia.ch10",
+          "page_title": "10 一致性与共识",
+          "heading": "线性一致性",
+          "url": "https://ddia.vonng.com/ch10/#sec_consistency_linearizability"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "传递事件流",
+          "url": "https://ddia.vonng.com/ch12/#sec_stream_transmit"
+        }
+      ],
+      "artifact": "行情分区与 fanout、订单状态机、外部回报去重、partial fill/cancel race、热点降级和 reconciliation runbook。",
+      "acceptance": [
+        "断线重连能用 sequence/cursor 检测缺口并补读，而不是把 WebSocket 当成可靠日志。",
+        "订单重试、成交回报和取消竞争都有幂等规则与单调状态转换。",
+        "说明热门 ticker、慢消费者和经纪商故障时的背压、降级、恢复及可观测指标。"
+      ],
+      "repair": "若只会说 exactly once，改画 command、outbox、broker callback、dedupe ledger 和 projection 五步时序，并为每一步列重复、乱序和响应丢失处理。",
+      "algorithms": {
+        "tag": "Trees",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Balanced Binary Tree",
+            "slug": "balanced-binary-tree",
+            "url": "https://leetcode.com/problems/balanced-binary-tree/"
+          },
+          {
+            "title": "Same Tree",
+            "slug": "same-tree",
+            "url": "https://leetcode.com/problems/same-tree/"
+          },
+          {
+            "title": "Subtree of Another Tree",
+            "slug": "subtree-of-another-tree",
+            "url": "https://leetcode.com/problems/subtree-of-another-tree/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 7,
+      "day": 3,
+      "kind": "project-read",
+      "title": "Uber · 完整通读",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "问题框定",
+          "instruction": "先写 FR/NFR、容量假设和不做什么；暂不画扩展组件。",
+          "minutes": 30
+        },
+        {
+          "title": "连续完整通读",
+          "instruction": "从 Understanding/Understand the Problem 按原文顺序读到 High-Level Design：Uber。",
+          "minutes": 80
+        },
+        {
+          "title": "关页重建",
+          "instruction": "不看答案重画 API、数据模型、读写路径和权威状态。",
+          "minutes": 30
+        },
+        {
+          "title": "验收与修复",
+          "instruction": "逐条核对验收标准；不通过就执行当天 repair，不用补读掩盖。",
+          "minutes": 20
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "Understanding the Problem",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#understanding-the-problem"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "Non-Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#non-functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "The Set Up",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#the-set-up"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "Planning the Approach",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#planning-the-approach"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "Defining the Core Entities",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#defining-the-core-entities"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "API or System Interface",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#api-or-system-interface"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "High-Level Design",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#high-level-design"
+        }
+      ],
+      "artifact": "一张包含 fare estimate、ride request、driver location、matching、reservation 与 trip lifecycle 的 Uber 白板。",
+      "acceptance": [
+        "位置更新、附近搜索和派单写入分成不同状态，陈旧位置不会被误认为权威司机可用性。",
+        "同一司机在并发请求下最多被一个 active reservation 占用，并有明确 TTL 与释放规则。",
+        "接受、拒绝、超时、重新匹配和行程开始均由可恢复状态机表达。"
+      ],
+      "repair": "如果设计只有 geo DB 加 WebSocket，补画 ride 与 driver 两个状态机，逐步标出 reservation、timeout、queue、idempotency 和用户可见状态。",
+      "algorithms": {
+        "tag": "Trees",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Lowest Common Ancestor of a Binary Search Tree",
+            "slug": "lowest-common-ancestor-of-a-binary-search-tree",
+            "url": "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree/"
+          },
+          {
+            "title": "Binary Tree Level Order Traversal",
+            "slug": "binary-tree-level-order-traversal",
+            "url": "https://leetcode.com/problems/binary-tree-level-order-traversal/"
+          },
+          {
+            "title": "Binary Tree Right Side View",
+            "slug": "binary-tree-right-side-view",
+            "url": "https://leetcode.com/problems/binary-tree-right-side-view/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 7,
+      "day": 4,
+      "kind": "project-deep",
+      "title": "Uber · Deep Dive 与 Senior 修复",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "Deep Dives",
+          "instruction": "围绕 Uber 逐个回答机制、规模阈值和失败语义。",
+          "minutes": 50
+        },
+        {
+          "title": "精确补课",
+          "instruction": "只读今天列出的 Core / Technology / Pattern / DDIA 小节。",
+          "minutes": 30
+        },
+        {
+          "title": "Senior/Staff 追问",
+          "instruction": "先口述回答，再对照详细答案；为每个追问写证据。",
+          "minutes": 40
+        },
+        {
+          "title": "故障注入与修复",
+          "instruction": "把超时、重复、乱序、热点或部分失败注入白板后重答。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "Potential Deep Dives",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#potential-deep-dives"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "1) How do we handle frequent driver location updates and efficient proximity searches on location data?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#1-how-do-we-handle-frequent-driver-location-updates-and-efficient-proximity-searches-on-location-data"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "2) How can we manage system overload from frequent driver location updates while ensuring location accuracy?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#2-how-can-we-manage-system-overload-from-frequent-driver-location-updates-while-ensuring-location-accuracy"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "3) How do we prevent multiple ride requests from being sent to the same driver simultaneously?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#3-how-do-we-prevent-multiple-ride-requests-from-being-sent-to-the-same-driver-simultaneously"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "4) How can we ensure no ride requests are dropped during peak demand periods?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#4-how-can-we-ensure-no-ride-requests-are-dropped-during-peak-demand-periods"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "5) What happens if a driver fails to respond in a timely manner?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#5-what-happens-if-a-driver-fails-to-respond-in-a-timely-manner"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "6) How can you further scale the system to reduce latency and improve throughput?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#6-how-can-you-further-scale-the-system-to-reduce-latency-and-improve-throughput"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "What is Expected at Each Level?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#what-is-expected-at-each-level"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "Senior",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#senior"
+        },
+        {
+          "source_id": "hi.core.db-indexing",
+          "page_title": "Database Indexing",
+          "heading": "Geospatial Indexes",
+          "url": "https://www.hellointerview.com/learn/system-design/core-concepts/db-indexing#geospatial-indexes"
+        },
+        {
+          "source_id": "hi.pattern.dealing-with-contention",
+          "page_title": "Dealing with Contention",
+          "heading": "Conditional Writes",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/dealing-with-contention#conditional-writes"
+        },
+        {
+          "source_id": "hi.pattern.long-running-tasks",
+          "page_title": "Managing Long Running Tasks",
+          "heading": "Managing Queue Backpressure",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/long-running-tasks#managing-queue-backpressure"
+        },
+        {
+          "source_id": "hi.pattern.realtime-updates",
+          "page_title": "Real-time Updates",
+          "heading": "Common Interview Scenarios",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/realtime-updates#common-interview-scenarios"
+        },
+        {
+          "source_id": "hi.core.consistent-hashing",
+          "page_title": "Consistent Hashing",
+          "heading": "Addressing Hot Spots",
+          "url": "https://www.hellointerview.com/learn/system-design/core-concepts/consistent-hashing#addressing-hot-spots"
+        },
+        {
+          "source_id": "ddia.ch7",
+          "page_title": "7 分片",
+          "heading": "倾斜的工作负载与缓解热点",
+          "url": "https://ddia.vonng.com/ch7/#sec_sharding_skew"
+        },
+        {
+          "source_id": "ddia.ch9",
+          "page_title": "9 分布式系统的麻烦",
+          "heading": "分布式锁和租约",
+          "url": "https://ddia.vonng.com/ch9/#sec_distributed_lock_fencing"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "容错",
+          "url": "https://ddia.vonng.com/ch12/#sec_stream_fault_tolerance"
+        }
+      ],
+      "artifact": "位置分层、geo index、司机 reservation、持久化派单队列、超时重匹配、geo-sharding 与跨边界 runbook。",
+      "acceptance": [
+        "能用 freshness、速度和密度调整位置上报，而不是固定频率淹没系统。",
+        "条件写或带 fencing 的短租约能阻止双重派单，并解释 TTL 到期竞争。",
+        "峰值请求进入可持久化队列，有 deadline、优先级、公平性和用户反馈。"
+      ],
+      "repair": "若回答“加锁加队列”就结束，补充锁的 owner/version/TTL、队列的 retry/deadline/dedupe，以及跨 geo cell 时的所有权转移。",
+      "algorithms": {
+        "tag": "Trees",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Count Good Nodes in Binary Tree",
+            "slug": "count-good-nodes-in-binary-tree",
+            "url": "https://leetcode.com/problems/count-good-nodes-in-binary-tree/"
+          },
+          {
+            "title": "Validate Binary Search Tree",
+            "slug": "validate-binary-search-tree",
+            "url": "https://leetcode.com/problems/validate-binary-search-tree/"
+          },
+          {
+            "title": "Kth Smallest Element in a BST",
+            "slug": "kth-smallest-element-in-a-bst",
+            "url": "https://leetcode.com/problems/kth-smallest-element-in-a-bst/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 7,
+      "day": 5,
+      "kind": "integration",
+      "title": "实时更新、外部系统与一致性边界",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "四通道语义分类",
+          "instruction": "分别写行情、订单、位置、派单的键、频率、保留时长、顺序和可丢性，避免用统一交付保证。",
+          "minutes": 40
+        },
+        {
+          "title": "外部回报状态机",
+          "instruction": "画交易所订单回报与司机接受/超时的事件时序，用版本或合法转移拒绝晚到状态。",
+          "minutes": 40
+        },
+        {
+          "title": "热点与背压预算",
+          "instruction": "估算热门股票和机场网格的单分区压力，设计合并更新、分层 fanout、限流或负载削减阈值。",
+          "minutes": 40
+        },
+        {
+          "title": "断连恢复校验",
+          "instruction": "注入客户端断线和消费者积压，写快照+增量恢复、缺口检测以及订单/派单最终核验。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "2) How does the system track order updates?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#2-how-does-the-system-track-order-updates"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "2) How can we manage system overload from frequent driver location updates while ensuring location accuracy?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#2-how-can-we-manage-system-overload-from-frequent-driver-location-updates-while-ensuring-location-accuracy"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "当消费者跟不上生产者时",
+          "url": "https://ddia.vonng.com/ch12/#id459"
+        }
+      ],
+      "artifact": "一张四通道时序图：行情、订单、司机位置、派单；每条标出事件键、允许乱序窗口、真相源、降采样/背压及客户端恢复游标。",
+      "acceptance": [
+        "行情与司机位置都能丢弃或合并旧更新，但订单状态和派单接受必须有单调状态机与幂等命令；图中差异明确。",
+        "能解释交易所回报或司机超时晚到时，如何按版本/状态拒绝陈旧转换并向客户端推送可恢复结果。",
+        "至少量化一个热门股票和一个机场热点的更新率、分片压力与降级阈值，并写出准确性损失。"
+      ],
+      "repair": "若所有实时事件都进入同一 Kafka topic 后便结束，按业务键和交付语义拆通道；对每条补乱序、重复、积压时的确定处理后再演练。",
+      "algorithms": {
+        "tag": "Trees",
+        "mode": "review",
+        "problems": [
+          {
+            "title": "Invert Binary Tree",
+            "slug": "invert-binary-tree",
+            "url": "https://leetcode.com/problems/invert-binary-tree/"
+          },
+          {
+            "title": "Balanced Binary Tree",
+            "slug": "balanced-binary-tree",
+            "url": "https://leetcode.com/problems/balanced-binary-tree/"
+          },
+          {
+            "title": "Lowest Common Ancestor of a Binary Search Tree",
+            "slug": "lowest-common-ancestor-of-a-binary-search-tree",
+            "url": "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 7,
+      "day": 6,
+      "kind": "mock",
+      "title": "Robinhood + Uber 双题 Mock",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "订单或派单主 Mock",
+          "instruction": "随机抽题，画权威状态机、实时读模型和外部依赖；量化高频事件与业务命令两类吞吐。",
+          "minutes": 45
+        },
+        {
+          "title": "切题四连问",
+          "instruction": "用另一题连续回答热点、乱序、重复命令和外部系统超时，每问给出确定状态。",
+          "minutes": 30
+        },
+        {
+          "title": "近似边界复盘",
+          "instruction": "逐条审查行情/位置/订单/派单，指出错误地选择强一致或允许陈旧的位置及成本。",
+          "minutes": 40
+        },
+        {
+          "title": "权威写路径重录",
+          "instruction": "重录最弱状态机段，必须包含合法转移、版本条件、幂等、超时和恢复校验。",
+          "minutes": 45
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "3) How does the system manage order consistency?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#3-how-does-the-system-manage-order-consistency"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "3) How do we prevent multiple ride requests from being sent to the same driver simultaneously?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#3-how-do-we-prevent-multiple-ride-requests-from-being-sent-to-the-same-driver-simultaneously"
+        },
+        {
+          "source_id": "hi.senior.expectations",
+          "page_title": "The System Design Interview: What is Expected at Each Level",
+          "heading": "Breadth",
+          "url": "https://www.hellointerview.com/blog/the-system-design-interview-what-is-expected-at-each-level#breadth"
+        }
+      ],
+      "artifact": "一份主 Mock 记录与一份 30 分钟切题追问稿，另附“可近似/不可近似”决策清单及每项理由。",
+      "acceptance": [
+        "主设计在需求阶段明确实时延迟、订单或派单正确性、外部依赖和峰值负载，不把强一致性施加给所有读。",
+        "Robinhood 能回答行情 fanout、订单回报、订单一致性；Uber 能回答位置索引、同一司机并发请求、峰值请求不丢中的至少四问。",
+        "能用一个晚到事件和一个热点分片故障说明检测信号、用户可见状态、降级及恢复后的对账。"
+      ],
+      "repair": "若设计无法回答“谁有权决定最终状态”，先标出交易所或派单状态机的权威写者；再删除任何绕过该写者的缓存写路径并复答。",
+      "algorithms": {
+        "tag": "Trees",
+        "mode": "timed",
+        "problems": [
+          {
+            "title": "Maximum Depth of Binary Tree",
+            "slug": "maximum-depth-of-binary-tree",
+            "url": "https://leetcode.com/problems/maximum-depth-of-binary-tree/"
+          },
+          {
+            "title": "Same Tree",
+            "slug": "same-tree",
+            "url": "https://leetcode.com/problems/same-tree/"
+          },
+          {
+            "title": "Binary Tree Level Order Traversal",
+            "slug": "binary-tree-level-order-traversal",
+            "url": "https://leetcode.com/problems/binary-tree-level-order-traversal/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 7,
+      "day": 7,
+      "kind": "repair",
+      "title": "订单与位置热点复测",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "热点类型定量诊断",
+          "instruction": "选热门股票或机场网格，写键频率分布、单分区容量和首次越过的资源阈值。",
+          "minutes": 30
+        },
+        {
+          "title": "拆分与聚合方案",
+          "instruction": "设计读副本、二级分片、时间桶或分层 fanout，逐项计算写放大、合并读和陈旧度。",
+          "minutes": 50
+        },
+        {
+          "title": "迁移故障演练",
+          "instruction": "模拟拆分中双写、路由缓存陈旧与节点宕机，写防重复、回退和状态校验。",
+          "minutes": 40
+        },
+        {
+          "title": "变参复测",
+          "instruction": "把流量倾斜再提高一个数量级，无提示解释新瓶颈、保护阈值和不会破坏的业务不变量。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.robinhood",
+          "page_title": "Robinhood",
+          "heading": "1) How can the system scale up live price updates?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/robinhood#1-how-can-the-system-scale-up-live-price-updates"
+        },
+        {
+          "source_id": "hi.breakdown.uber",
+          "page_title": "Uber",
+          "heading": "1) How do we handle frequent driver location updates and efficient proximity searches on location data?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/uber#1-how-do-we-handle-frequent-driver-location-updates-and-efficient-proximity-searches-on-location-data"
+        },
+        {
+          "source_id": "ddia.ch7",
+          "page_title": "7 分片",
+          "heading": "倾斜的工作负载与缓解热点",
+          "url": "https://ddia.vonng.com/ch7/#sec_sharding_skew"
+        }
+      ],
+      "artifact": "一份热点负载表与前后架构差异图；至少包含键分布、峰值 QPS、单节点上限、拆分策略、准确性或延迟代价和回滚阈值。",
+      "acceptance": [
+        "能识别热点是单键读、单键写、订阅 fanout 还是地理网格倾斜，并选择不同缓解手段。",
+        "压测思维实验中给出达到阈值前后的 P99、积压或陈旧度变化，并明确何时触发降采样/扩分区。",
+        "热点迁移期间订单与派单状态仍由同一权威状态机裁决，重复或晚到命令有确定结果。"
+      ],
+      "repair": "若只提出“加机器”，改用一个无法水平拆分的热门键反例；设计二级分片、分层聚合或时间桶，并写合并读与一致性代价。",
+      "algorithms": {
+        "tag": "Trees",
+        "mode": "timed",
+        "problems": [
+          {
+            "title": "Diameter of Binary Tree",
+            "slug": "diameter-of-binary-tree",
+            "url": "https://leetcode.com/problems/diameter-of-binary-tree/"
+          },
+          {
+            "title": "Subtree of Another Tree",
+            "slug": "subtree-of-another-tree",
+            "url": "https://leetcode.com/problems/subtree-of-another-tree/"
+          },
+          {
+            "title": "Binary Tree Right Side View",
+            "slug": "binary-tree-right-side-view",
+            "url": "https://leetcode.com/problems/binary-tree-right-side-view/"
+          }
+        ]
+      }
+    }
+  ]
+}

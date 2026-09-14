@@ -1,0 +1,264 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KnowLoop · 学、讲、追问、复习</title><style>
+      :root {
+        --paper: #f6f5f0;
+        --ink: #172d30;
+        --muted: #617271;
+        --line: #dce3df;
+        --teal: #086b62;
+        --warm: #ad5a32;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          15px/1.65 system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      main {
+        max-width: 1200px;
+        margin: auto;
+        padding: 32px 28px 64px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 22px;
+      }
+      .brand {
+        font-size: 23px;
+        font-weight: 800;
+        letter-spacing: -1px;
+      }
+      .brand i {
+        color: var(--teal);
+        font-style: normal;
+      }
+      small,
+      .muted {
+        color: var(--muted);
+      }
+      h1 {
+        font-size: clamp(30px, 4vw, 48px);
+        letter-spacing: -1.5px;
+        line-height: 1.2;
+        margin: 28px 0 12px;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 0 0 14px;
+      }
+      h3 {
+        font-size: 16px;
+        margin: 0 0 8px;
+      }
+      .eyebrow {
+        letter-spacing: 2px;
+        font-size: 11px;
+        text-transform: uppercase;
+        color: var(--teal);
+        font-weight: 700;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: 30px;
+        margin: 30px 0;
+      }
+      .panel {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 24px;
+        min-width: 0;
+      }
+      .today {
+        background: var(--ink);
+        color: white;
+      }
+      .today .muted {
+        color: #bfd2cc;
+      }
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin: 22px 0;
+      }
+      .kpi b {
+        display: block;
+        font-size: 31px;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -1px;
+      }
+      .kpi small {
+        display: block;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+      }
+      .filters {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin: 24px 0 12px;
+      }
+      label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      select {
+        display: block;
+        background: #fff;
+        color: var(--ink);
+        border: 1px solid #a5b7ad;
+        border-radius: 8px;
+        padding: 9px;
+        max-width: 100%;
+        font: inherit;
+      }
+      select:focus-visible,
+      summary:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #c98942;
+        outline-offset: 3px;
+      }
+      ul {
+        padding-left: 20px;
+      }
+      li {
+        margin: 8px 0;
+      }
+      a {
+        color: var(--teal);
+      }
+      code {
+        background: #eaf0eb;
+        border-radius: 5px;
+        padding: 3px 6px;
+        color: #185a52;
+      }
+      svg {
+        width: 100%;
+        max-height: 320px;
+        overflow: visible;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 9px 5px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .table-wrap {
+        overflow: auto;
+      }
+      details {
+        border-top: 1px solid var(--line);
+        padding: 12px 0;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .pill {
+        display: inline-block;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 2px 9px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .empty {
+        padding: 30px 0;
+        color: var(--muted);
+      }
+      .task {
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+      }
+      .task strong {
+        display: block;
+      }
+      .warn {
+        color: var(--warm);
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font: inherit;
+        background: var(--paper);
+        padding: 12px;
+        border-radius: 8px;
+      }
+      .footer {
+        margin-top: 28px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      progress {
+        accent-color: var(--teal);
+        width: 100%;
+        height: 9px;
+      }
+      .demo {
+        background: #fbe6c8;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        margin-top: 20px;
+      }
+      @media (max-width: 720px) {
+        main {
+          padding: 20px 16px;
+        }
+        .hero,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .kpis {
+          grid-template-columns: 1fr 1fr;
+        }
+        .panel {
+          padding: 18px;
+        }
+        header {
+          align-items: flex-start;
+          gap: 14px;
+        }
+        .filters > label {
+          width: 100%;
+        }
+        select {
+          width: 100%;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style></head><body><main><header><div class="brand">Know<i>Loop</i></div><a href="#courses">课程目录</a></header><section class="hero"><div><div class="eyebrow">Read → Explain → Probe → Repair → Return</div><h1>学过的东西，<br>下次能自己讲清楚。</h1><p>输入 <code>$coach</code>，从课程或你正在读的一章开始。教练安排今天的任务，依据实际回答追问、纠错，再接着上次练。</p><p><a href="dashboard-demo.html">看看学习看板 →</a></p></div><aside class="panel today"><h2>课程公开，学习记录留在你身边。</h2><p>安装后自带课程快照；计划、回答、错题和评分保存在本地。</p><p class="muted">不会凭空给“掌握度”。看完、提示后答对、独立做到、延迟复测分开记录。</p><p><code>coach，今天学什么？</code></p></aside></section><p class="muted">课程快照 2026-09-13.1 随安装包提供。未配置公共端点时，刷新保持离线。</p><section class="panel" id="system-design-delivery"><h2>系统设计，从需求一步步推导到深挖</h2>
+<p>Functional Requirements → Non-functional Requirements → Core Entities → Data Flow → API / System Interface → High Level Design → Deep Dives</p>
+<p>陪读先讲当前环节再检查理解；练习先自己作答；Mock 由你主导、结束后复盘；复测回到已记录的薄弱环节。保存当前阶段和下一步，下次接着学。</p>
+<p class="muted">参考 <a href="https://www.hellointerview.com/learn/system-design/in-a-hurry/delivery" rel="noreferrer">Hello Interview Delivery Framework</a>。原文先 API、后可选 Data Flow；这里默认先梳理数据流，再定义 API。陪读指定文章时跟随原文顺序。</p>
+<p><code>$coach 陪我学 News Feed，从 Functional Requirements 开始</code></p></section><div class="grid" id="courses"><section class="panel" id="system-design"><div class="eyebrow">system-design</div><h2>System Design · 9-week resource plan</h2><p class="muted">Weekly focus summaries from the public plan. Task durations and acceptance targets are coach study slices, not official full-week workloads.</p><p><code>coach，从 system-design 第 1 周开始，今天 30 分钟</code></p><details><summary>Week 1 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">Requirements, capacity &amp; URL Shortener</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 2 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">News Feed: replication, indexes &amp; caching</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 3 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">Chat, notifications, rate limiting &amp; geospatial</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 4 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">Key-value store, file sync &amp; consistency</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 5 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">Transactions, orders &amp; flash sale</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 6 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">Streaming, aggregation &amp; metrics</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 7 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">Search, ranking &amp; Top K</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 8 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">Video/CDN; collaborative editor and scheduler mocks</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 9 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/" rel="noreferrer">Integrate, mock and taper</a> <span class="pill">System Design</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details></section><section class="panel" id="coding"><div class="eyebrow">coding</div><h2>Coding · 6-week resource plan</h2><p class="muted">Suggested sequencing from the public resource. Read the linked resource to choose a concrete problem.</p><p><code>coach，从 coding 第 1 周开始，今天 30 分钟</code></p><details><summary>Week 1 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/" rel="noreferrer">State maintenance &amp; traversal foundations</a> <span class="pill">Coding</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 2 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/" rel="noreferrer">Continue state maintenance &amp; traversal</a> <span class="pill">Coding</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 3 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/" rel="noreferrer">Ordering &amp; binary search</a> <span class="pill">Coding</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 4 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/" rel="noreferrer">DP, object design &amp; enumeration</a> <span class="pill">Coding</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 5 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/" rel="noreferrer">Review weak patterns</a> <span class="pill">Coding</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details><details><summary>Week 6 · 1 tasks</summary><ul><li><a href="https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/" rel="noreferrer">Timed coding mocks</a> <span class="pill">Coding</span><p class="muted">Explain the approach, attempt independently, then handle a changed constraint.</p></li></ul></details></section></div><p class="footer"><a href="courses.json">机器可读课程数据</a> · 看板中的全部记录均为合成示例。</p></main></body></html>

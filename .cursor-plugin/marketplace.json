@@ -1,0 +1,16 @@
+{
+  "name": "crack-system-interview-skill",
+  "owner": {
+    "name": "Crack System Interview contributors"
+  },
+  "metadata": {
+    "description": "Interview coaching with private evidence and retests."
+  },
+  "plugins": [
+    {
+      "name": "crack-system-interview-skill",
+      "source": "plugins/crack-system-interview-skill",
+      "description": "Start with interview-coach for coding, design, data, behavioral and resume practice."
+    }
+  ]
+}

@@ -1,0 +1,193 @@
+{
+  "schema_version": "1.0",
+  "id": "bitly-core",
+  "title": "URL Shortener / Bitly",
+  "type": "project",
+  "level": "senior",
+  "prompt": {
+    "interviewer": "Design a URL shortening service like Bitly.",
+    "baseline": "用户创建 short URL，可选 custom alias 和 expiration；访问 short URL 后跳转到 original URL。目标是 redirect 小于 100ms、高可用、约 1B mappings / 100M DAU、读远多于写。"
+  },
+  "requirements": {
+    "functional": [
+      "创建 short URL，支持 optional custom alias 与 expiration。",
+      "根据 short_code 跳转到 long_url。",
+      "支持查看和禁用自己创建的链接。"
+    ],
+    "non_functional": [
+      "redirect 是用户可见 hot path，目标 p99 小于 100ms。",
+      "read-heavy、高可用、映射持久化。",
+      "过期和禁用必须在 redirect 时生效。"
+    ],
+    "out_of_scope": [
+      "完整 analytics dashboard。",
+      "custom domain、多地域双活。",
+      "复杂风控与机器学习检测。"
+    ]
+  },
+  "estimates": [
+    {
+      "question": "1B URL mappings 需要多少原始存储？",
+      "assumption": "每条 mapping 粗估 500B，不含索引和副本。",
+      "answer": "约 500GB；它说明要重视索引、备份与增长，但不足以单独证明必须 sharding。"
+    },
+    {
+      "question": "redirect QPS 的量级？",
+      "assumption": "100M DAU，每人每天约 10 次 redirect。",
+      "answer": "约 1B/day，平均约 12K QPS；按 5-10 倍峰值设计读路径、cache 与 DB fallback。"
+    }
+  ],
+  "api": [
+    {
+      "method": "POST",
+      "path": "/urls",
+      "purpose": "创建短链接。",
+      "request": "long_url, optional custom_alias, optional expires_at, idempotency key",
+      "response": "short_code, short_url, expires_at",
+      "failure": "custom alias 冲突返回 409；无效 URL 返回 400。"
+    },
+    {
+      "method": "GET",
+      "path": "/{short_code}",
+      "purpose": "redirect hot path。",
+      "response": "302 Location: long_url",
+      "failure": "不存在 404；已过期或禁用 410。"
+    },
+    {
+      "method": "GET",
+      "path": "/urls/{id}",
+      "purpose": "管理面读取，不进入 redirect hot path。",
+      "response": "mapping metadata",
+      "failure": "未授权 403。"
+    }
+  ],
+  "entities": [
+    {
+      "name": "url_mappings",
+      "fields": ["id", "short_code", "long_url", "owner_user_id", "created_at", "expires_at", "is_disabled"],
+      "indexes": ["UNIQUE(short_code)", "(owner_user_id, created_at DESC)", "(expires_at)"],
+      "decision": "DB 是 long_url、expiration 与 disabled 状态的 source of truth；cache 只加速读取。"
+    }
+  ],
+  "architecture": {
+    "components": [
+      "Client",
+      "DNS / CDN / Load Balancer",
+      "URL Service / Redirect Service",
+      "Distributed Cache",
+      "Mapping Database",
+      "Optional event queue for analytics"
+    ],
+    "flows": [
+      {
+        "name": "create path",
+        "steps": ["validate input", "allocate or validate short_code", "durable DB write", "return mapping", "emit optional async event"],
+        "correctness_boundary": "unique index or conditional write owns custom_alias / short_code uniqueness."
+      },
+      {
+        "name": "redirect path",
+        "steps": ["edge routing", "cache lookup", "DB fallback", "validate expiry / disabled", "return 302"],
+        "correctness_boundary": "DB decides state; cache TTL and invalidation must not outlive expiry or disable semantics."
+      }
+    ]
+  },
+  "deep_dives": [
+    {
+      "id": "short-code-uniqueness",
+      "decision": "默认选择 counter + base62 或 random code + unique index；先说明 correctness，再比较可猜测性和可用性。",
+      "alternatives": ["hash long_url", "counter + base62", "random code with collision retry"],
+      "failure_modes": ["counter service outage", "range allocation duplication", "custom alias namespace conflict", "random collision storm"],
+      "operating_metrics": ["collision retry rate", "allocation latency", "counter range utilization"]
+    },
+    {
+      "id": "fast-redirect",
+      "decision": "用 cache-aside 加速 redirect，但 DB 保持 source of truth；默认选择 302，保留目标变更、expiry 与 disable 控制权。",
+      "alternatives": ["301 permanent redirect", "cache-only mapping", "read replica without cache"],
+      "failure_modes": ["hot key", "cache miss storm", "stale disabled link", "DB failover"],
+      "operating_metrics": ["cache hit rate", "redirect p99", "DB fallback QPS", "hot-key eviction rate"]
+    }
+  ],
+  "interviewer_followups": [
+    {
+      "question": "你会先问什么？",
+      "must_cover": ["create / redirect", "alias / expiration", "规模与地域", "第一版 out of scope"]
+    },
+    {
+      "question": "为什么 redirect 是第一优先级？",
+      "must_cover": ["读写不对称", "用户可见 hot path", "可量化 latency SLO"]
+    },
+    {
+      "question": "为什么默认 302 而不是 301？",
+      "must_cover": ["浏览器/中间层缓存", "目标变更", "expiration / disable"]
+    },
+    {
+      "question": "两个用户同时申请同一个 alias 怎么办？",
+      "must_cover": ["unique constraint 或 conditional write", "409", "应用预查不能保证正确性"]
+    },
+    {
+      "question": "cache miss 或 DB down 时会怎样？",
+      "must_cover": ["miss 合并", "过载保护", "明确降级与不可用语义"]
+    },
+    {
+      "question": "什么时候才需要 sharding？",
+      "must_cover": ["写入、索引容量、读副本、运维窗口或地域需求成为真实瓶颈", "不能只因 1B mappings 就分片"]
+    }
+  ],
+  "reference_answer": [
+    {
+      "stage": "0-5 min · framing",
+      "answer": "我会先确认第一版是否只覆盖创建和 redirect，以及 alias、expiration、地域和规模。我的主线是 durable create 和低延迟 redirect；analytics 与复杂风控先异步化。"
+    },
+    {
+      "stage": "5-12 min · contract and state",
+      "answer": "我会用 POST /urls 创建 mapping，用 GET /{short_code} 返回 302。mapping 的 source of truth 是带 unique short_code 的数据库表；expiry 和 disabled 必须是 redirect 决策的一部分。"
+    },
+    {
+      "stage": "12-22 min · architecture",
+      "answer": "create path 是 validate、code allocation、durable write；redirect path 是 edge、cache、DB fallback、状态校验和 302。cache 只缩短 hot read，不拥有业务真相。"
+    },
+    {
+      "stage": "22-35 min · deep dives",
+      "answer": "短码方面我会先选能证明唯一性的方案，例如 counter + base62 加 range allocation，或 random code 加 unique index retry。redirect 方面我会讨论 TTL、expiry/disable invalidation、hot key、stampede 和 DB failover。"
+    },
+    {
+      "stage": "35-45 min · tradeoffs",
+      "answer": "1B mappings 大约是数百 GB 级别，因此先把索引、replica、cache hit 和运维边界做对，而不是立刻分片。只有单库写入、索引增长或多地域成为证据充分的瓶颈时，才按 short_code hash 或 region/tenant 演进。"
+    }
+  ],
+  "rubric": {
+    "passing_score": 75,
+    "dimensions": [
+      {"id": "framing", "label": "Problem framing", "weight": 10},
+      {"id": "requirements", "label": "Requirements / NFR", "weight": 15},
+      {"id": "api", "label": "API contract", "weight": 15},
+      {"id": "data", "label": "Data model", "weight": 15},
+      {"id": "capacity", "label": "Capacity", "weight": 15},
+      {"id": "hld", "label": "HLD", "weight": 15},
+      {"id": "deep-dives", "label": "Deep dives / failure", "weight": 15}
+    ],
+    "critical_misses": [
+      "未说明 short_code 唯一性。",
+      "缺少 302 / 404 / 410 语义。",
+      "把 cache 当 source of truth。",
+      "没有估算就直接 sharding。",
+      "没有 cache miss 或 DB down failure path。"
+    ]
+  },
+  "repair_tasks": [
+    {"dimension": "api", "action": "重写 POST /urls 与 GET /{short_code} 的 contract，补状态码和 idempotency。", "retest": "5 分钟口述。"},
+    {"dimension": "data", "action": "从 redirect lookup 反推 url_mappings schema 与 index。", "retest": "解释 cache 与 DB 的职责。"},
+    {"dimension": "capacity", "action": "重新估算 storage、QPS、cache hit 与 DB fallback。", "retest": "说明为什么现在不分片。"},
+    {"dimension": "failure", "action": "补 cache miss、DB down、hot key、counter outage 与 expired link。", "retest": "抽答四个 follow-up。"}
+  ],
+  "sources": [
+    {"title": "Bitly", "provider": "Hello Interview", "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/bitly"},
+    {"title": "Delivery Framework", "provider": "Hello Interview", "url": "https://www.hellointerview.com/learn/system-design/in-a-hurry/delivery"},
+    {"title": "第二章：数据系统的目标", "provider": "DDIA", "url": "https://ddia.vonng.com/ch2/"}
+  ],
+  "related_algorithms": {
+    "tag": "Arrays & Hashing",
+    "required": ["Contains Duplicate", "Valid Anagram", "Two Sum", "Group Anagrams", "Product of Array Except Self", "Valid Sudoku"],
+    "optional": ["Ransom Note", "Contains Duplicate II", "Sort Characters By Frequency"]
+  }
+}

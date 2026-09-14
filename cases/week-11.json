@@ -1,0 +1,437 @@
+{
+  "week": 11,
+  "theme": "周期任务、时序活动与派生视图",
+  "audio_preview": {
+    "title": "Week 11｜价格追踪与 Strava 两分钟预听",
+    "script": "这一周比较两种“时间不断前进”的系统。Price Tracking Service 要发现并周期抓取五亿商品，把不可信来源转换成可审计的价格历史，再按阈值可靠通知用户；Strava 则从手机离线记录活动，恢复网络后分片上传轨迹，生成路线、距离、feed、实时分享和排行榜。两题都不能把定时器或 WebSocket 当作正确性。周期任务需要 durable schedule、lease、幂等结果和有上限的 retry；移动端同步需要 activity_id、chunk sequence、finalize transaction 和冲突策略。原始事实与派生视图也要分开：价格 observation、GPS points 是可重算依据，图表、feed、segment leaderboard 和通知状态是投影。迟到、重复和乱序事件必须在数据模型里有位置。性能优化从访问模式出发：价格图按 product+time 分区并 rollup，活动流按 athlete/follower 组织，实时位置只保留短窗口并明确 freshness。深挖时持续追问谁拥有权威状态、任务失败后下一次何时执行、用户为什么不会收到重复提醒、设备离线几小时后如何收敛。最终要用 schedule lag、observation quality、notification duplicate、sync completion、live-location age 和 leaderboard drift 证明系统不仅跑得快，而且能长期修复。练习还要分别模拟租约持有者复活、设备重复提交和投影重建，验证旧写入不会覆盖新版本，用户也能看见数据仍在处理或已经陈旧。"
+  },
+  "projects": [
+    {
+      "slug": "camelcamelcamel",
+      "title": "Price Tracking Service",
+      "source": "hi.breakdown.camelcamelcamel",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "The API",
+          "Data Flow",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 product discovery、durable scheduler、fetch/extension observations、validation、price history、threshold subscription 与 notification workflow 的价格追踪白板。",
+        "acceptance": [
+          "五亿商品不会同时扫描，任务按 next_due、变化率、价值和来源限速分层调度。",
+          "价格 observation 保留 source、observed_at、confidence 与幂等 ID，恶意扩展数据不能直接成为当前价格。",
+          "阈值 crossing、通知去重、重试和 re-arm 有持久状态。"
+        ],
+        "repair": "若设计只写 cron + scraper + DB，补 ProductSchedule、FetchAttempt、PriceObservation、Subscription、Notification 五个状态机及 lease/retry。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we efficiently discover and track 500 million Amazon products?",
+          "2) How do we handle potentially malicious price updates from Chrome extension users?",
+          "3) How do we efficiently process price changes and notify subscribed users?",
+          "4) How do we serve fast price history queries for chart generation?",
+          "Final Design",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.camelcamelcamel",
+        "deliverable": "分层调度、来源可信度与异常检测、threshold state machine、时序分区/rollup、失败重试和数据修正 runbook。",
+        "acceptance": [
+          "调度吞吐能从 500M 商品、抓取周期和来源 politeness 估算，热点与冷商品频率不同。",
+          "扩展 observation 只作为信号，经过签名、限流、交叉验证和异常规则后才影响价格。",
+          "通知以 subscription+crossing/version 幂等，价格回摆和 provider retry 不会骚扰用户。"
+        ],
+        "repair": "答不出任务规模时计算每日 due items 与 fetch/s；答不出通知时画 below→crossed→notified→rearmed 状态及唯一键。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Orchestrating Job Dependencies",
+          "why": "组织 discover、fetch、parse、validate、persist 和 notify 依赖。"
+        },
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Handling Repeated Failures",
+          "why": "隔离坏商品、反爬响应和永久解析失败。"
+        },
+        {
+          "source": "hi.deep.time-series-databases",
+          "heading": "Time-Based Partitioning (Sharding by Time)",
+          "why": "按 product/time 保存价格历史并裁剪查询。"
+        },
+        {
+          "source": "hi.deep.time-series-databases",
+          "heading": "Downsampling and Rollups",
+          "why": "为多年图表提供日/周粒度而不扫描所有 observation。"
+        },
+        {
+          "source": "hi.deep.kafka",
+          "heading": "Handling Retries and Errors",
+          "why": "让价格变更和通知事件可重放且不因 poison event 阻塞。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch11",
+          "heading": "分布式作业编排",
+          "why": "理解大规模周期抓取和重试的持久调度。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "流处理的应用",
+          "why": "从 observation 持续派生当前价格、阈值 crossing 和通知。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "故障与部分失效",
+          "why": "处理抓取成功、存储失败和通知结果未知的跨系统状态。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "五亿商品需要分层调度而非全量 cron",
+          "body": "每个 ProductSchedule 保存 next_due、last_success、change_rate、priority、source policy、attempt 和 lease。scheduler 只扫描到期时间桶，按商品热度、价格波动、订阅人数和来源限速调整周期；长期不变的冷商品降低频率，新订阅或剧烈变化商品提高。worker 以短 lease 领取，成功后原子写 observation 并计算下次 due，失败按错误类型退避，永久失败隔离。全局队列按 marketplace/domain 公平调度，避免热门来源封禁拖累全部。关键指标是 due lag、fetch success、429、attempt 和 coverage。调度扩缩容与时钟漂移演练要确认同一任务可重复执行但结果幂等，并且旧 lease 无法把较新的 next_due 覆盖。",
+          "takeaway": "周期任务是持久状态和优先级调度，不是进程内定时器。"
+        },
+        {
+          "title": "价格是带来源与置信度的观察",
+          "body": "PriceObservation 至少包含 product_id、amount、currency、source、observed_at、received_at、event_id、parser_version 和 confidence。网页抓取、官方 feed 与浏览器扩展可信度不同，不能直接 last-write-wins。验证层检查币种、数量级、与近期趋势、多个来源和页面签名的一致性；异常 observation 保留但不更新 canonical current_price，进入复核。解析规则升级可从保存原始响应重跑。当前价格记录指向被采用 observation 和 version，历史修正有审计轨迹，避免恶意或错误值悄悄污染提醒。每天抽样回查页面证据与采用结果，按来源统计误报和陈旧度，才能校准 confidence 而不是把它当静态常数。",
+          "takeaway": "外部价格不是事实写入，而是需要验证、可追溯的观测。"
+        },
+        {
+          "title": "Chrome 扩展是低信任数据源",
+          "body": "扩展事件由已发布版本签名，携带 installation/session 粗身份、页面 URL、DOM fingerprint 和 observation_id；入口做认证、限流、schema 与时间校验。单个用户或单个 IP 的价格不能直接生效，系统按独立来源数、与服务器抓取差异、速度和设备信誉聚合风险。可疑事件仍保存为 raw signal，标记 accepted/rejected reason；策略版本进入判断以支持重放。隐私上不收集不必要浏览历史，只提交用户主动访问的目标商品和最小字段，并提供删除与保留边界。",
+          "takeaway": "客户端众包提升覆盖，但必须是可审计信号而非权威写入口。"
+        },
+        {
+          "title": "阈值通知是一台可重入状态机",
+          "body": "Subscription 保存 product、threshold、direction、channel、last_observed_version、armed_state 与 cooldown。canonical price 更新生成 versioned event；处理器比较前后状态，只有从 above 到 below 的 crossing 创建 notification，唯一键为 subscription_id+crossing_version。outbox 异步发送，provider timeout 重试同一 notification_id，成功回执记录。价格继续低于阈值不重复提醒，回升到 rearm threshold 或用户配置后才重新 armed；滞后/修正 observation 是否补发由明确策略决定。指标看 crossing lag、duplicate suppressed 和 provider retry。用抖动价格序列、消费者回放和供应商超时三类测试，证明业务边沿与发送副作用都只发生一次。用户修改阈值、币种或通知渠道时也要创建配置版本，并明确是否对当前价格重新评估，避免旧 crossing 被新规则再次发送。",
+          "takeaway": "提醒由状态边沿触发，不由每条低价事件触发。"
+        },
+        {
+          "title": "价格图表读取时序投影",
+          "body": "raw observations 按 product_id 和时间分区，保留来源与修正；canonical price change 形成较小序列，仅当有效价格变化时新增点。短范围查询读原始变更，年度图选择日/周 rollup，bucket 保存 open/high/low/close 或代表值与 sample count。query service 做 partition pruning、resolution 选择和 cache，响应带 data_through 与 currency/normalization version。不能只保存当前价格，否则无法重算提醒和解释异常；也不应为图表扫描所有重复抓取。监控 scanned points、rollup lag 与 correction。历史纠错要重建受影响的 bucket 并按 watermark 失效缓存，再以原始序列抽样核对图表点和极值没有被吞掉。",
+          "takeaway": "原始观测用于审计，规范化变更与 rollup 用于交互查询。"
+        },
+        {
+          "title": "失败、反爬与恢复必须可运营",
+          "body": "来源可能返回 429、验证码、布局变化或错误货币，notification provider 也可能接受后超时。不同错误分开处理：429 遵守 Retry-After，解析失败隔离 parser/version，页面不存在进入终态，未知通知查询或幂等重试。队列积压时保护高订阅商品并拉长冷商品周期，不增加并发继续撞来源。dashboard 展示 schedule lag、source coverage、parser error、anomaly rate、price freshness、notification pending age 和 reconciliation drift。修复 parser 后从原始响应重跑，不必重新抓取全部页面。恢复计划还要限制回放速率并标记 parser 版本，防止一次修复同时触发抓取洪峰、价格震荡和通知风暴。",
+          "takeaway": "长期服务质量来自分类失败、限速恢复和可重处理原始证据。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "500M 商品怎样在合理时间内追踪，为什么不能每天全抓？",
+          "trigger": "候选人没有 pages/s、来源限速或分层频率。",
+          "answer": "每天全抓 500M 约需 5.8K fetch/s 平均吞吐，乘峰值、失败和多 marketplace 后更高，还可能违反来源 politeness。应让每个商品保存 next_due，按订阅人数、变化率、价格临近阈值和来源更新特征分层：热商品分钟/小时，冷商品天/周；RSS/feed 或扩展信号可提前触发验证。scheduler 扫到期时间桶并按 domain 配额发 lease，失败退避。监控 due lag、coverage、429 和每层 freshness，用业务价值分配有限抓取预算，而不是追求无差别频率。",
+          "follow_up": "新商品没有历史变化率，初始抓取频率如何设定？",
+          "common_miss": "只横向扩容，不考虑外部来源允许的总速率。",
+          "repair": "给 hot/warm/cold 三层写规模、周期和最低 fetch/s。",
+          "sources": [
+            {
+              "source": "hi.breakdown.camelcamelcamel",
+              "heading": "1) How do we efficiently discover and track 500 million Amazon products?"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Orchestrating Job Dependencies"
+            }
+          ]
+        },
+        {
+          "question": "恶意扩展用户上报一分钱价格，如何防止触发全量提醒？",
+          "trigger": "候选人信任客户端或只按 user_id 去重。",
+          "answer": "扩展 observation 先进入低信任 raw store，不直接更新 canonical price。入口验证签名版本、product URL、时间与 schema，按 installation/IP/device 限流；风险层比较近期价格、多个独立来源、服务器抓取和 DOM fingerprint。异常值标记 quarantine，并触发受控服务器验证；只有达到策略置信度的 observation 才发布 canonical price version。通知只消费 canonical event，因此恶意 raw signal 不会直接触发。所有 accepted/rejected reason 与策略版本保留，可重放审计；异常 campaign 按来源和扩展版本快速熔断。",
+          "follow_up": "真实 flash sale 也会价格暴跌，怎样减少误判？",
+          "common_miss": "粗暴丢弃所有异常值，既不可审计又漏掉真实促销。",
+          "repair": "画 raw observation → risk score → corroboration → canonical update 四层。",
+          "sources": [
+            {
+              "source": "hi.breakdown.camelcamelcamel",
+              "heading": "2) How do we handle potentially malicious price updates from Chrome extension users?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "流处理的应用"
+            }
+          ]
+        },
+        {
+          "question": "价格在阈值附近上下抖动，如何避免重复通知？",
+          "trigger": "候选人每次 price<threshold 都发送。",
+          "answer": "Subscription 是有状态规则：armed 时只有从阈值上方跨到下方才创建 crossing_version；发送后进入 triggered/cooldown，价格持续低于阈值不再发。只有回升到 threshold+hysteresis 或用户设定的 rearm 条件才重新 armed，避免小幅抖动。通知唯一键 subscription_id+crossing_version，provider retry 复用 notification_id；结果未知先查询或幂等重试。迟到价格修正是否补发要有时间窗口。状态 checkpoint 与价格 version 保证 consumer 重放不会再触发旧 crossing。",
+          "follow_up": "用户修改 threshold 时，当前低价是否立即触发？",
+          "common_miss": "只有消息去重，没有业务状态边沿和 re-arm。",
+          "repair": "用 100→79→81→78 的价格序列演算 armed、triggered、rearmed。",
+          "sources": [
+            {
+              "source": "hi.breakdown.camelcamelcamel",
+              "heading": "3) How do we efficiently process price changes and notify subscribed users?"
+            },
+            {
+              "source": "hi.deep.kafka",
+              "heading": "Handling Retries and Errors"
+            }
+          ]
+        },
+        {
+          "question": "十年价格历史图如何在 200ms 内返回？",
+          "trigger": "候选人扫描所有 raw observations 或只说加 cache。",
+          "answer": "先把重复抓取转换为 canonical price-change series，再按 product/time 分区；query planner 根据图表像素和范围选择原始、日或周 rollup，做 partition pruning。rollup 保存 open/high/low/close、代表值和 count，版本关联 normalization/currency。热门 product/range 缓存绑定 data watermark，历史 finalized 分区可长 TTL，最近分区短 TTL。响应限制最大点数并返回 resolution、data_through。raw observation 留作审计重算，不走交互查询。监控 scanned partitions、points、cache hit 和 rollup lag。用十年冷数据与刚纠错的热分区分别压测，确保长缓存不返回旧币种或旧聚合版本。",
+          "follow_up": "历史价格被纠错后，旧 rollup 和 cache 如何更新？",
+          "common_miss": "缓存掩盖全表扫描，过期时仍产生雪崩。",
+          "repair": "为 1天、1月、10年查询分别选择 resolution 和最大点数。",
+          "sources": [
+            {
+              "source": "hi.breakdown.camelcamelcamel",
+              "heading": "4) How do we serve fast price history queries for chart generation?"
+            },
+            {
+              "source": "hi.deep.time-series-databases",
+              "heading": "Downsampling and Rollups"
+            }
+          ]
+        },
+        {
+          "question": "抓取成功、价格已写入，但 scheduler ack 丢失会怎样？",
+          "trigger": "候选人认为 durable queue 会阻止重复抓取。",
+          "answer": "lease 到期后任务会重做，这是预期的至少一次行为。fetch attempt 使用稳定 schedule_run_id，PriceObservation 以 product+source+observed_at/content hash 或 event_id 条件写；重复结果返回已有 version，不重复生成 canonical price event。下一次 next_due 只接受匹配 schedule version 的条件更新，旧 worker 不能覆盖新计划。若 body 已保存但 observation 未提交，重试可复用原始响应或 orphan scanner 清理。指标记录 expired lease、duplicate observation、schedule conflict 和 pending age。正确性来自幂等提交，而非无重复执行。故障测试要在写入、事件发布和调度确认之间逐点中断，核对 observation、canonical version 与 next_due 最终收敛。",
+          "follow_up": "旧 worker 长时间暂停后恢复，如何避免把 next_due 推回过去？",
+          "common_miss": "忽略 worker pause 和旧 lease 持有者复活。",
+          "repair": "模拟 lease expiry、新 worker 完成、旧 worker 恢复的 version 条件。",
+          "sources": [
+            {
+              "source": "hi.breakdown.camelcamelcamel",
+              "heading": "Senior"
+            },
+            {
+              "source": "ddia.ch9",
+              "heading": "故障与部分失效"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "strava",
+      "title": "Strava",
+      "source": "hi.breakdown.strava",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Defining the Core Entities",
+          "The API",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 mobile offline recording、chunk upload/finalize、activity processing、feed、live sharing 和 leaderboard 的 Strava 白板。",
+        "acceptance": [
+          "离线 GPS 先写本地 durable log，网络恢复后分片幂等上传并原子 finalize。",
+          "Activity 原始轨迹与距离、路线、feed、segment effort 等派生结果分离且可重算。",
+          "10M concurrent、实时分享和 leaderboard 分别有分区、陈旧和隐私边界。"
+        ],
+        "repair": "若设计假设手机始终在线，先画 start/pause/stop 本地状态机、chunk sequence、upload session、checksum 和 finalize transaction。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we support tracking activities while offline?",
+          "2) How can we scale to support 10 million concurrent activities?",
+          "3) How can we support realtime sharing of activities with friends?",
+          "4) How can we expose a leaderboard of top athletes?"
+        ],
+        "senior_source": "hi.senior.expectations",
+        "senior_headings": [
+          "Breadth",
+          "Depth",
+          "Proactiveness"
+        ],
+        "source_gap": "Strava 当前项目页没有 What is Expected at Each Level?/Senior 小节；Senior 标尺引用通用等级说明，并由本项目 acceptance、Q&A 与 repair 补足。",
+        "deliverable": "offline sync、10M ingest 分区、live location freshness/privacy、segment leaderboard 版本与 raw replay failure matrix。",
+        "acceptance": [
+          "重复、乱序和缺失 chunk 不会生成两次 Activity，finalize 前对 checksum/sequence 完整性校验。",
+          "实时分享丢连接后用 cursor/snapshot 恢复，并在位置过旧或权限撤销时 fail-closed。",
+          "排行榜能说明 eligibility、segment matching、late correction、作弊审核和重算。"
+        ],
+        "repair": "答不出同步时列 device/activity/chunk 三层 ID；答不出榜单时拆 raw GPS、effort detection、eligibility、rank projection 与 moderation。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "\"How do you handle connection failures and reconnection?\"",
+          "why": "让 live sharing 在断线后以 cursor/snapshot 收敛。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Batching and Hierarchical Aggregation",
+          "why": "批量上传 GPS points，并分层维护统计和榜单。"
+        },
+        {
+          "source": "hi.deep.time-series-databases",
+          "heading": "Time-Based Partitioning (Sharding by Time)",
+          "why": "按 athlete/activity/time 保存轨迹与实时点。"
+        },
+        {
+          "source": "hi.core.db-indexing",
+          "heading": "Geospatial Indexes",
+          "why": "做路线候选、segment 匹配和附近活动查询。"
+        },
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Preventing Duplicate Work",
+          "why": "让 activity processing 与 segment detection 在重试下幂等。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch6",
+          "heading": "同步引擎与本地优先软件",
+          "why": "理解离线设备记录、重连上传和冲突处理。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "时间推理",
+          "why": "区分 GPS event time、上传时间和排行榜处理时间。"
+        },
+        {
+          "source": "ddia.ch7",
+          "heading": "倾斜的工作负载与缓解热点",
+          "why": "处理大型赛事、热门 segment 和名人 live share 热点。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "离线优先从设备状态机开始",
+          "body": "手机在 start 时生成 activity_id，并把 GPS point 追加到本地 durable log；每点有 sequence、event_time、accuracy 和传感器元数据。pause/stop 也是日志事件，应用被杀后可从日志恢复。网络可用时按连续 sequence 分 chunk，携带 checksum 和稳定 upload_session 重试；服务端按 activity_id+chunk_index 幂等保存，乱序可以接受但记录缺口。stop 后 finalize 请求声明 expected chunks/last sequence，只有完整校验通过才把 Activity 从 uploading 推到 committed，避免半条路线进入 feed。本地空间耗尽时要优先保留边界与最近未确认 chunk，并明确提示用户数据风险，不能静默覆盖旧轨迹。",
+          "takeaway": "设备先可靠记录，上传协议再保证服务器最终获得同一活动。"
+        },
+        {
+          "title": "原始轨迹与派生 Activity 分离",
+          "body": "原始 GPS points 是可审计输入，保存在对象或时序存储；Activity 表保存 owner、状态、时间范围、版本和处理 watermark。后台 job 对 committed 轨迹做去噪、map matching、距离/海拔计算、隐私裁剪和 segment detection，结果以 activity_id+processor_version 幂等写入。算法升级时从 raw points 重算新 version，再原子切换展示。feed、统计和 leaderboard 只消费 published Activity event。若 processing 失败，用户看到处理中并可重试，不重复上传或创建第二条活动。版本切换前需比较距离、海拔与 segment 命中漂移，异常活动留在旧版并进入人工或批量修复队列。",
+          "takeaway": "保留原始事实，所有计算结果都带版本并可重建。"
+        },
+        {
+          "title": "10M 并发活动靠批量与稳定分区",
+          "body": "客户端不应每秒发单点请求，而是压缩数十到数百点批量上传，断线时本地有界缓冲。gateway 按 athlete_id 或 activity_id hash 路由，单活动顺序由 chunk sequence 保证；对象存储承担大字节，metadata/commit 服务只写小状态。大型赛事会让某地区入口和热门 segment 处理过热，因此 ingest 与 downstream processing 分离，队列按租户/区域限流。容量从 points/s、bytes/point、batch size、upload QPS 和 retention 推导，监控 missing chunk、ingest lag 和 processing backlog。压测要同时注入区域突发、超长活动和大量重试，确认元数据分区、对象存储前缀与下游队列都不会形成新热点。",
+          "takeaway": "批量压缩大幅降低请求数，日志与异步处理隔离实时上传峰值。"
+        },
+        {
+          "title": "实时分享是短期、受控的位置流",
+          "body": "athlete 明确开启 live sharing 并选择 viewers/expiration 后，设备发送低频位置点；服务端验证 activity、权限和 sequence，保存短 TTL latest state 与短期 replay buffer，通过 SSE/WebSocket 推送。viewer 重连提交 cursor，缺口可 replay，超窗返回 snapshot；位置 age 超阈值显示 stale，不外推猜测。撤销分享或活动结束写 deny/version，连接层每次推送检查当前 permission，旧 cache 不能继续泄漏。名人热点通过区域 fanout/edge 复制，但原始精确位置和保留最小化。安全测试应测权限撤销到所有边缘断连的最坏延迟，并确认过期 replay 与日志不再泄露精确路线。",
+          "takeaway": "live location 的核心是 consent、freshness、撤销和短保留，不只是连接协议。"
+        },
+        {
+          "title": "Feed 是可重算的社交投影",
+          "body": "Activity 发布后生成事件，fanout 服务依据 follower graph 物化活跃用户 inbox，长尾可在读取时合并；名人采用 pull 或混合策略避免写爆。feed item 只保存 activity_id、actor、rank fields 和 version，详情回 Activity 服务；block、privacy change 和删除通过快速 deny/final check 覆盖陈旧 inbox。点赞与评论独立写入并异步更新计数，不阻塞活动发布。缓存按 viewer/feed generation 分隔，指标观察 fanout lag、stale denied、celebrity skew 和 first-page p95。投影丢失时可从 published event 重建，重建期间读取必须继续做最终隐私校验并标记 feed 陈旧时间。删除和拉黑事件走高优先级旁路，保证隐私收敛不被普通 fanout 积压阻塞。",
+          "takeaway": "社交 feed 可以最终一致，但权限撤销和详情事实必须回权威服务。"
+        },
+        {
+          "title": "排行榜需要资格、版本和修正",
+          "body": "segment 定义为版本化路线 geometry，processing 从 GPS 轨迹识别 effort 并计算 elapsed time、athlete、activity 和 confidence。Leaderboard 以 segment+category+period 物化 Top N，但只有满足隐私、运动类型、GPS 质量和反作弊规则的 effort 才 eligible。迟到上传或算法修正生成更高 version，ranking projection 幂等重排；被举报结果可先隐藏并保留审计。热门 segment 使用局部 Top M 合并，完整 efforts 在分区存储供分页和重算。指标包括 detection lag、rank drift、moderation backlog 和 rebuild time。榜单 generation 切换应原子完成，旧规则版本可追溯，用户申诉后能说明某次排名为何出现、消失或改变。重建完成后抽样核对边界名次。",
+          "takeaway": "排行榜不是一个 sorted set，而是规则驱动、可修正的派生视图。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "手机离线三小时并重启，如何保证活动不丢且不重复？",
+          "trigger": "候选人依赖内存 buffer 或重连后重新创建 activity。",
+          "answer": "start 时生成稳定 activity_id，GPS 与 pause/stop 事件先顺序写本地 durable log；重启从最后 fsynced sequence 恢复。上传按 activity_id+chunk_index 幂等，chunk 带 first/last sequence 与 checksum，服务器可乱序接收并记录 bitmap。响应丢失就重发同一 chunk，不产生新活动。stop 后 finalize 声明 last sequence/expected chunks，只有无缺口且 checksum 合法才 commit；重复 finalize 返回同一 version。缺口请求客户端补发，无法恢复时明确 partial/rejected，而不是静默截断。再通过杀进程、断网和重复 finalize 的设备测试核对本地日志、服务端 bitmap 与最终点数一致。",
+          "follow_up": "设备存储即将满时，本地 log 如何降级？",
+          "common_miss": "把网络重试当同步协议，没有稳定 ID 和完整性检查。",
+          "repair": "画 device log、chunk bitmap、finalize 三层，模拟 chunk 2 丢失与重复。",
+          "sources": [
+            {
+              "source": "hi.breakdown.strava",
+              "heading": "1) How can we support tracking activities while offline?"
+            },
+            {
+              "source": "ddia.ch6",
+              "heading": "同步引擎与本地优先软件"
+            }
+          ]
+        },
+        {
+          "question": "10M concurrent activities 的瓶颈如何估算并拆解？",
+          "trigger": "候选人直接说 Kafka 分区或横向扩容。",
+          "answer": "先假设每设备采样频率、压缩后 bytes/point 和 batch interval。例如 1Hz、约几十字节、每 30 秒一批，则 points/s 是 10M，upload QPS 约 333K，再计算入口带宽、对象写和 metadata QPS。客户端批量压缩，本地断线缓冲；gateway 按 activity hash 分区，raw chunks 直写对象存储，metadata 小事务提交，processing 从队列异步消费。大型赛事会造成区域和热门 segment 偏斜，需区域入口、配额和独立 downstream。监控 batch size、ingest lag、missing chunk 和 backlog 验证假设。容量表还要加入断网后集中补传的峰值系数，以及对象存储重试和处理追赶所需的独立余量。",
+          "follow_up": "若每台设备改为 5Hz 采样，哪一层先需调整？",
+          "common_miss": "只算用户数，不算点、批次、字节和派生 CPU。",
+          "repair": "完成 points/s、uploads/s、bytes/s、processing events/s 四行容量表。",
+          "sources": [
+            {
+              "source": "hi.breakdown.strava",
+              "heading": "2) How can we scale to support 10 million concurrent activities?"
+            },
+            {
+              "source": "hi.core.numbers-to-know",
+              "heading": "Applying These Numbers in System Design Interviews"
+            }
+          ]
+        },
+        {
+          "question": "朋友实时看活动，连接断开后如何恢复且不泄漏位置？",
+          "trigger": "候选人只说 WebSocket 自动重连。",
+          "answer": "每个 live activity 有 share_version、允许 viewers、expires_at 和单调 location sequence。viewer 连接时授权，重连携带 cursor；短期 replay buffer 补缺口，超窗返回 latest snapshot，并显示 location age。每次推送或批次都验证 share_version/deny cache，athlete 撤销或结束时立即 bump version、断开连接并清理短 TTL state。旧 cursor 不能绕过新权限。位置过旧显示 stale，不插值成精确轨迹。名人热点复制 fanout，但原始精确点不长期缓存。监控 unauthorized attempt、revocation lag、replay miss 和 stale viewers。通过撤权与边缘分区并发演练，验证缓存失联时默认拒绝而不是继续广播。",
+          "follow_up": "权限服务故障时，已有连接是否继续推送？",
+          "common_miss": "只考虑数据连续，没有 consent、撤销和保留。",
+          "repair": "画 authorize → push → revoke → reconnect 四步及 share_version。",
+          "sources": [
+            {
+              "source": "hi.breakdown.strava",
+              "heading": "3) How can we support realtime sharing of activities with friends?"
+            },
+            {
+              "source": "hi.pattern.realtime-updates",
+              "heading": "\"How do you handle connection failures and reconnection?\""
+            }
+          ]
+        },
+        {
+          "question": "热门 segment 排行榜怎样处理迟到上传、作弊和算法升级？",
+          "trigger": "候选人只维护 Redis Sorted Set。",
+          "answer": "权威 Effort 保存 activity_id、segment_version、elapsed、confidence、eligibility、processor_version 和 moderation state；排行榜只是 segment/category/period 的投影。迟到 activity 或重新处理产生版本化 effort，consumer 以 effort_id/version 幂等 upsert ranking；作弊检测可把项标 ineligible 并发布新 generation，不删除审计。算法升级从 raw GPS 重跑影子版本，对比 drift 后切换。热门 segment 由分区局部 Top M 合并，完整列表在持久存储分页。响应返回 data_through/rules_version，监控 detection lag、rank correction 和 moderation backlog。切换前按热门与长尾 segment 抽样比较名次变化，并保留一键回退到旧 generation 的能力。",
+          "follow_up": "两名运动员相同时间时，稳定 tie-breaker 是什么？",
+          "common_miss": "把排序结构当 source of truth，无法解释修正和重建。",
+          "repair": "区分 Effort 事实、eligibility 判断、Leaderboard generation 三层。",
+          "sources": [
+            {
+              "source": "hi.breakdown.strava",
+              "heading": "4) How can we expose a leaderboard of top athletes?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Batching and Hierarchical Aggregation"
+            }
+          ]
+        },
+        {
+          "question": "项目页没有 Senior 小节，如何定义这题的 Senior 深度？",
+          "trigger": "候选人猜测不存在的项目 anchor，或只复述 HLD。",
+          "answer": "我会显式记录 source gap，等级依据引用 Hello Interview 通用 Senior 说明，不伪造 Strava 项目链接。把通用 breadth、depth、proactiveness 落到本题：breadth 要覆盖 offline sync、ingest、派生处理、live/privacy 和 leaderboard；depth 至少能证明 chunk 幂等或排行榜版本修正；proactiveness 要主动提出位置隐私、设备失败、热门赛事偏斜和重算证据。验收使用本项目 deliverable、指标、Q&A 与 repair。这样既保留来源准确性，也让等级要求成为可观察行为。",
+          "follow_up": "Staff+ 应如何讨论全球数据驻留、反作弊团队与成本？",
+          "common_miss": "将通用等级标准误写成 Strava 原文，破坏可审计性。",
+          "repair": "为 breadth/depth/proactiveness 各写一段两分钟 Strava 证据。",
+          "sources": [
+            {
+              "source": "hi.senior.expectations",
+              "heading": "Depth"
+            },
+            {
+              "source": "hi.breakdown.strava",
+              "heading": "Potential Deep Dives"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

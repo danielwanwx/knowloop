@@ -1,0 +1,161 @@
+{
+  "title": "Ticketmaster 热门活动抢票设计",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "modular-composite",
+  "summary": "抢票系统要把可用性优先的浏览路径和一致性优先的锁座路径分开设计。",
+  "task": "设计热门活动售票系统：用户能浏览活动、进入等待室、锁定座位、完成支付，并避免超卖。",
+  "constraints": [
+    "浏览活动可以接受短暂陈旧，锁座和确认订单不能接受错误库存",
+    "热门开售会产生瞬时尖峰，入口必须限流、排队并保护库存服务",
+    "支付是外部依赖，必须处理超时、重复回调、幂等和补偿释放"
+  ],
+  "planning": {
+    "complexity": "high",
+    "diagram_strategy": "modular-composite",
+    "reason": "这个题同时涉及读路径、写路径、库存一致性、支付失败恢复和入口削峰，单一流程图会过度拥挤。",
+    "signals": {
+      "entities": 12,
+      "flows": 5,
+      "technical_types": ["API", "cache", "queue", "database", "consistency", "payment", "failure recovery"]
+    },
+    "modules": [
+      {"id": "overview", "title": "系统边界和流量入口", "layout": "overview", "full_width": true},
+      {"id": "browse", "title": "浏览 / 读路径：可用性优先", "layout": "pipeline"},
+      {"id": "booking", "title": "下单 / 写路径：先削峰再锁座", "layout": "pipeline"},
+      {"id": "inventory", "title": "库存一致性边界", "layout": "concept"},
+      {"id": "payment", "title": "支付和补偿恢复", "layout": "pipeline"}
+    ]
+  },
+  "blocks": [
+    {
+      "id": "fan",
+      "module": "overview",
+      "kind": "client",
+      "shape": "circle",
+      "title": "买票用户",
+      "body": "客户端会重试请求，入口必须把重复点击归并成同一笔业务结果。"
+    },
+    {
+      "id": "edge",
+      "module": "overview",
+      "kind": "api",
+      "title": "API Gateway 保护入口",
+      "body": "入口层做鉴权、限流、bot 防护和 idempotency key。它把浏览流量和购买流量分到不同后端路径。"
+    },
+    {
+      "id": "split",
+      "module": "overview",
+      "kind": "service",
+      "title": "读写路径分离",
+      "body": "浏览活动偏可用性，锁座下单偏正确性。这个边界决定 cache、queue 和 storage 的选择。"
+    },
+    {
+      "id": "catalog",
+      "module": "browse",
+      "kind": "cache",
+      "title": "Event catalog 可以陈旧",
+      "body": "活动详情、venue 信息和价格区间适合走 cache 或 search index。短暂不新鲜比页面不可用更容易接受。"
+    },
+    {
+      "id": "availability",
+      "module": "browse",
+      "kind": "service",
+      "title": "可售状态是近似信号",
+      "body": "列表页显示 availability hint，而不是承诺一定能买到。真正库存判断只发生在 hold 阶段。"
+    },
+    {
+      "id": "read_model",
+      "module": "browse",
+      "kind": "database",
+      "title": "异步 read model 承接查询",
+      "body": "库存和订单变化通过 CDC 或事件流刷新 read model。读路径保持高可用，但允许秒级收敛。"
+    },
+    {
+      "id": "waiting_room",
+      "module": "booking",
+      "kind": "queue",
+      "title": "Waiting room 公平削峰",
+      "body": "热门开售不能让所有请求直接打到 booking 和 inventory。等待室按令牌放行，保持后端处理速率稳定。"
+    },
+    {
+      "id": "booking_service",
+      "module": "booking",
+      "kind": "service",
+      "title": "Booking service 编排订单",
+      "body": "它先申请 seat hold，再创建 pending booking。客户端重试用同一个 idempotency key 返回同一笔业务结果。"
+    },
+    {
+      "id": "seat_hold",
+      "module": "booking",
+      "kind": "service",
+      "title": "Seat hold 有短 TTL",
+      "body": "锁座不是最终售出，而是给支付一个有限窗口。TTL 到期或支付失败时，hold 必须可自动释放。"
+    },
+    {
+      "id": "inventory_db",
+      "module": "inventory",
+      "kind": "database",
+      "title": "库存表是 CP 边界",
+      "body": "同一 seat_id 只能存在一个 active hold。用条件写、唯一约束或事务避免两个用户同时锁到同一座位。"
+    },
+    {
+      "id": "state_machine",
+      "module": "inventory",
+      "kind": "service",
+      "title": "座位状态必须单向推进",
+      "body": "available -> held -> sold 是核心状态机。取消、超时和失败只能走明确补偿路径，不能随意改写状态。"
+    },
+    {
+      "id": "audit",
+      "module": "inventory",
+      "kind": "note",
+      "title": "审计日志保留因果",
+      "body": "库存争议需要能回放 hold、payment callback 和 confirmation。日志比临时缓存更适合作为排障证据。"
+    },
+    {
+      "id": "payment_service",
+      "module": "payment",
+      "kind": "service",
+      "title": "支付调用必须幂等",
+      "body": "Payment provider 可能超时或重复回调。payment intent 和 booking id 绑定，重复事件只更新同一笔订单。"
+    },
+    {
+      "id": "confirm_order",
+      "module": "payment",
+      "kind": "database",
+      "title": "确认订单再售出座位",
+      "body": "只有支付成功并验证 hold 仍有效时，订单才从 pending 变 confirmed，座位才从 held 变 sold。"
+    },
+    {
+      "id": "release_hold",
+      "module": "payment",
+      "kind": "warning",
+      "title": "失败路径释放 hold",
+      "body": "支付失败、超时或 hold 过期都要释放库存。补偿任务要可重试，避免座位被永久卡住。"
+    }
+  ],
+  "connectors": [
+    {"from": "fan", "to": "edge"},
+    {"from": "edge", "to": "split"},
+    {"from": "split", "to": "catalog"},
+    {"from": "catalog", "to": "availability"},
+    {"from": "availability", "to": "read_model"},
+    {"from": "split", "to": "waiting_room"},
+    {"from": "waiting_room", "to": "booking_service"},
+    {"from": "booking_service", "to": "seat_hold"},
+    {"from": "seat_hold", "to": "inventory_db"},
+    {"from": "inventory_db", "to": "state_machine"},
+    {"from": "state_machine", "to": "audit"},
+    {"from": "booking_service", "to": "payment_service"},
+    {"from": "payment_service", "to": "confirm_order"},
+    {"from": "payment_service", "to": "release_hold"}
+  ],
+  "callouts": [
+    {
+      "title": "核心判断",
+      "body": "浏览路径偏 AP，购买路径偏 CP。把两个路径混在一起设计，通常会导致要么页面扛不住，要么库存不可信。"
+    }
+  ],
+  "talk_track": "这个题我会先把系统拆成浏览和购买两条路径。浏览活动、venue 和大致可售状态可以走缓存和 read model，因为这里短暂不新鲜通常可以接受；但锁座和确认订单必须走强一致库存边界，避免 double booking。热门开售前面放 waiting room 和限流，booking service 用幂等 key 编排 seat hold、payment intent 和订单状态。支付成功后才把 held 变 sold；失败、超时或 TTL 到期都走补偿释放 hold。这样读路径保可用，写路径保正确性。"
+}

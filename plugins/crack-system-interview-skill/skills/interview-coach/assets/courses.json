@@ -1,0 +1,405 @@
+{
+  "schema_version": 1,
+  "version": "2026-09-13.1",
+  "courses": [
+    {
+      "course_id": "system-design",
+      "title": "System Design · 9-week resource plan",
+      "version": "2026-09-13.1",
+      "updated_at": "2026-09-13",
+      "source_urls": [
+        "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/"
+      ],
+      "note": "Weekly focus summaries from the public plan. Task durations and acceptance targets are coach study slices, not official full-week workloads.",
+      "weeks": [
+        {
+          "week_id": "w1",
+          "label": "Week 1",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w1",
+              "title": "Requirements, capacity & URL Shortener",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w2",
+          "label": "Week 2",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w2",
+              "title": "News Feed: replication, indexes & caching",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w3",
+          "label": "Week 3",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w3",
+              "title": "Chat, notifications, rate limiting & geospatial",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w4",
+          "label": "Week 4",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w4",
+              "title": "Key-value store, file sync & consistency",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w5",
+          "label": "Week 5",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w5",
+              "title": "Transactions, orders & flash sale",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w6",
+          "label": "Week 6",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w6",
+              "title": "Streaming, aggregation & metrics",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w7",
+          "label": "Week 7",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w7",
+              "title": "Search, ranking & Top K",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w8",
+          "label": "Week 8",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w8",
+              "title": "Video/CDN; collaborative editor and scheduler mocks",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w9",
+          "label": "Week 9",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "sd-w9",
+              "title": "Integrate, mock and taper",
+              "track": "System Design",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/prep-plans/system-design-prep-plan/",
+              "minutes": 30,
+              "prerequisites": [
+                "HTTP, storage, caching and queues"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "Clarify requirements and one scale estimate",
+                "Explain the core data flow and why each component is needed",
+                "Analyze one bottleneck, failure mode and alternative"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "course_id": "coding",
+      "title": "Coding · 6-week resource plan",
+      "version": "2026-09-13.1",
+      "updated_at": "2026-09-13",
+      "source_urls": [
+        "https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/"
+      ],
+      "note": "Suggested sequencing from the public resource. Read the linked resource to choose a concrete problem.",
+      "weeks": [
+        {
+          "week_id": "w1",
+          "label": "Week 1",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "coding-w1",
+              "title": "State maintenance & traversal foundations",
+              "track": "Coding",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/",
+              "minutes": 30,
+              "prerequisites": [
+                "Python collections and Big-O reasoning"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "State the invariant and implement a working solution",
+                "Explain time and space complexity",
+                "Trace an edge case and repair a counterexample independently"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w2",
+          "label": "Week 2",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "coding-w2",
+              "title": "Continue state maintenance & traversal",
+              "track": "Coding",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/",
+              "minutes": 30,
+              "prerequisites": [
+                "Python collections and Big-O reasoning"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "State the invariant and implement a working solution",
+                "Explain time and space complexity",
+                "Trace an edge case and repair a counterexample independently"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w3",
+          "label": "Week 3",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "coding-w3",
+              "title": "Ordering & binary search",
+              "track": "Coding",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/",
+              "minutes": 30,
+              "prerequisites": [
+                "Python collections and Big-O reasoning"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "State the invariant and implement a working solution",
+                "Explain time and space complexity",
+                "Trace an edge case and repair a counterexample independently"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w4",
+          "label": "Week 4",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "coding-w4",
+              "title": "DP, object design & enumeration",
+              "track": "Coding",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/",
+              "minutes": 30,
+              "prerequisites": [
+                "Python collections and Big-O reasoning"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "State the invariant and implement a working solution",
+                "Explain time and space complexity",
+                "Trace an edge case and repair a counterexample independently"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w5",
+          "label": "Week 5",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "coding-w5",
+              "title": "Review weak patterns",
+              "track": "Coding",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/",
+              "minutes": 30,
+              "prerequisites": [
+                "Python collections and Big-O reasoning"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "State the invariant and implement a working solution",
+                "Explain time and space complexity",
+                "Trace an edge case and repair a counterexample independently"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        },
+        {
+          "week_id": "w6",
+          "label": "Week 6",
+          "status": "available",
+          "date_window": null,
+          "tasks": [
+            {
+              "task_id": "coding-w6",
+              "title": "Timed coding mocks",
+              "track": "Coding",
+              "source_url": "https://www.calm.rocks/resources/prepare-interview/coding/leetcode-faang/",
+              "minutes": 30,
+              "prerequisites": [
+                "Python collections and Big-O reasoning"
+              ],
+              "outcome": "Explain the approach, attempt independently, then handle a changed constraint.",
+              "acceptance": [
+                "State the invariant and implement a working solution",
+                "Explain time and space complexity",
+                "Trace an edge case and repair a counterexample independently"
+              ],
+              "provenance": "public_plan"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

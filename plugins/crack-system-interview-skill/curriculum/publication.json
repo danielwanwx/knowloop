@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "mode": "catalog-only",
+  "description": "Public output is limited to the bundled course catalog and an explicitly synthetic dashboard demonstration. Week and Day curriculum data remain local course inputs.",
+  "coach_catalog": "courses.json"
+}

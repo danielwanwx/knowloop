@@ -1,0 +1,646 @@
+{
+  "week": 2,
+  "theme": "边缘保护、共享内存状态与可靠调度",
+  "audio_preview": {
+    "title": "第 2 周导览：先把高频状态说清楚",
+    "script": "这一周的三道题看似分散，其实都在问同一个问题：大量并发请求到来时，哪一小块状态必须被正确推进。Rate Limiter 里是客户端和规则对应的令牌桶；Distributed Cache 里是键的版本、过期时间与当前所有者；Job Scheduler 里是某个计划时间对应的唯一执行实例。第一天不要急着说 Redis、哈希环或队列。先沿官方页面从问题理解读到高层设计，把实体、接口、同步承诺点和用户可见结果画成一条时序。第二天再进入深挖：令牌扣减为什么需要单键原子操作，缓存节点切换怎样阻止旧主继续写，调度租约过期后旧 worker 为什么必须被 fencing。你要反复区分事实状态和派生状态：响应头、缓存副本、队列通知、执行统计都能重建，不能拿来代替唯一事实。容量题也不要只报总 QPS，要算一次逻辑动作放大成多少读写、哪个键会先热、故障时还剩多少容量。mock 时我会追问超时后的结果未知、重复消息、时钟漂移和热门键；复盘必须写出不变量、故障注入、指标与修复，而不是追加更多组件。完成本周后，你应当能把高频基础设施题讲成可验证的状态机，并知道何时用一致性换正确，何时用近似和降级保护整体。使用时先暂停音频，凭记忆画出事实状态、提交点和故障分支，再继续核对。每天结束前必须留下可复查的图、容量计算和一条 repair 记录；如果答案只能说出组件名，就回到原文对应标题，把请求时序与用户可见结果补全。周末的综合 mock 不追求背诵固定架构，而要在约束变化后仍能守住不变量、说明取舍，并用指标决定降级、扩展和回滚。"
+  },
+  "projects": [
+    {
+      "slug": "distributed-rate-limiter",
+      "title": "Rate Limiter",
+      "source": "hi.breakdown.distributed-rate-limiter",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Rate Limiter 端到端设计图：标出 客户端与规则对应的令牌桶、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 一次请求如何被识别、原子扣减并返回 429 或放行 与 在十毫秒预算内读取规则并完成判定，每条箭头标明协议或数据。",
+          "明确 Redis 单键原子脚本返回 allow 或 deny，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 客户端与规则对应的令牌桶，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we scale to handle 1M requests/second?",
+          "2) How do we ensure high availability and fault tolerance?",
+          "3) How do we minimize latency overhead?",
+          "4) How do we handle hot keys (viral content scenarios)?",
+          "5) How do we handle dynamic rule configuration?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.distributed-rate-limiter",
+        "deliverable": "提交 Rate Limiter 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 5 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Distributed Locks",
+          "why": "理解并发读改写为何必须缩成单键原子操作。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Sharding and Partitioning",
+          "why": "把高频计数更新按稳定客户端键分散。"
+        },
+        {
+          "source": "hi.deep.redis",
+          "heading": "Redis for Rate Limiting",
+          "why": "评估共享内存状态的可用性与故障窗口。"
+        },
+        {
+          "source": "hi.core.consistent-hashing",
+          "heading": "Virtual Nodes",
+          "why": "理解限流状态扩容时的有限重映射与均匀分布。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch8",
+          "heading": "可串行化",
+          "why": "把令牌扣减建模为必须串行化的最小冲突域。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "不可靠的时钟",
+          "why": "判断补充时间时不能忽略时钟跳变与漂移。"
+        },
+        {
+          "source": "ddia.ch7",
+          "heading": "倾斜的工作负载与缓解热点",
+          "why": "处理热门 IP 或 API key。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "从限流语义选择算法，而不是先背 Redis",
+          "body": "固定窗口只保存一个计数器，空间很省，却允许用户在窗口交界的两秒内用掉两倍额度；滑动日志逐条保存时间戳，判定最精确，但高频客户会让内存和清理成本随请求数增长；滑动计数器用前后两个窗口加权，代价是近似误差。令牌桶只保留 tokens 与 last_refill，bucket capacity 表达允许的突发，refill rate 表达长期速率，适合 API 的脉冲流量。设计时必须先问清“100 次/分钟”是否容忍边界突发、闲置客户是否满桶启动、一次请求会同时命中用户、IP、端点和全局几条规则。最终允许与否取所有适用规则中最严格的结果，并用 429、remaining、resetTime 和 Retry-After 把服务端判定变成客户端可执行的退避协议。",
+          "takeaway": "先把突发、公平、内存和误差预算说清，再选择令牌桶或窗口算法。"
+        },
+        {
+          "title": "限流器放在哪里，决定了它看得见什么",
+          "body": "进程内计数没有网络开销，却只看见落到本实例的流量；五台应用服务器各自允许一百次，就可能把全局上限放大五倍。独立限流服务能读取订阅等级等业务上下文，但给每个请求增加一次 RPC，也成为新的故障点。放在 API Gateway 可在请求进入后端前拒绝滥用，并直接读取 JWT 的 userId、X-API-Key、路径与可信代理写入的客户端 IP，因此是常见选择；代价是高级业务属性必须编码进令牌或本地规则缓存。多层规则的键应明确写成 scope:type:id:endpoint:ruleVersion，不能只按 IP，因为公司 NAT 会把许多正常用户压成一个热点。网关还要防止客户端伪造 X-Forwarded-For，并区分认证失败、限流拒绝和限流依赖故障。",
+          "takeaway": "部署位置、身份提取和规则作用域必须在同一张请求时序图上解释。"
+        },
+        {
+          "title": "用 Lua 封住令牌桶的读—算—写竞态",
+          "body": "先 HMGET、在网关计算补充量、再 HSET，即使用 MULTI/EXEC 包住写入也不安全：两个网关可能读到同一枚剩余令牌并都放行。正确边界是一段单键 Lua 脚本，在 Redis 内部读取 tokens 与 last_refill，以 max(0, now-last_refill) 计算补充量，截断到桶容量，再判断是否扣除，最后同时写回并设置空闲 TTL；脚本一次返回 passes、remaining 和 resetTime。规则与桶参数要带版本，避免规则从每分钟一百次改成十次时沿用不兼容状态。Redis Cluster 分片时把 clientId 与 ruleId 放在同一个 hash tag，保证脚本不跨 slot。时间可以由 Redis 端统一取得，或传入网关时间但限制倒退，绝不能让负的时间差凭空增加额度。",
+          "takeaway": "原子性必须覆盖完整的读取、补充、判定和扣减，而不是只包住两条写命令。"
+        },
+        {
+          "title": "把一百万次判定拆成可计算的分片预算",
+          "body": "目标是一百万请求每秒，而单个 Redis 实例对复杂脚本的可持续吞吐往往低于简单 GET 的十万到二十万次每秒，所以不能用宣传峰值直接除法。先压测真实 Lua、键大小、连接数和副本复制开销；若安全值是每分片八万次判定，正常流量至少需要十三个主分片，再按一台失效仍不超过百分之七十利用率增加余量。Redis Cluster 的 16384 个 slot 或一致性哈希虚拟节点让增减节点只搬动部分桶，但迁移期间网关必须处理 MOVED/ASK 与短暂重试。普通 clientId 可均匀分散，单个共享 NAT 或遭攻击的 API key 却不能靠加分片解决，因为一个桶必须串行更新。此时应在边缘先封禁明确恶意源，对合法大客户提供批量 API、专属额度或分层的本地小配额。",
+          "takeaway": "容量计算要同时覆盖总吞吐、单键串行上限和失去一个分片后的余量。"
+        },
+        {
+          "title": "Redis 故障时，fail-open 与 fail-closed 是业务决策",
+          "body": "主分片不可达时，直接 fail-open 会让洪峰越过保护层，可能把数据库一起压垮；统一 fail-closed 又会让健康后端被限流器拖成全站不可用。应按规则风险分级：登录防爆破、付费写入和正在遭攻击的端点倾向关闭放行；低风险读取可使用网关预留的保守本地令牌并标记 degraded。主从切换还存在异步复制窗口，新主可能缺少刚扣掉的令牌，造成短暂超发，因此要把“允许少量超发”写进一致性预算，而不是声称副本带来无损切换。多地域若追求十毫秒延迟，可把全局额度静态切成各区配额并保留应急池；跨区每次强同步虽然更精确，却会把广域往返放到所有请求路径。故障指标必须区分依赖超时、降级放行、降级拒绝和估算超发量。",
+          "takeaway": "先确定后端保护与用户可用性的优先级，再为不同规则选择降级模式。"
+        },
+        {
+          "title": "动态规则必须带版本、传播界限和回滚路径",
+          "body": "生产限额会因促销、攻击或付费等级随时变化。每三十秒轮询配置库实现简单，但紧急收紧规则最多要等一个轮询周期；推送能更快，却必须处理网关断线、重复事件和启动时漏消息。可将规则保存为不可变版本，推送只通知新版本号，网关收到后从权威配置服务拉取完整快照、校验签名，再原子替换本地表；心跳携带 appliedVersion，使控制面能看见仍在旧版的实例。变更发布先到少量网关，观察 429 比例、后端饱和度和判定 p99，再逐步扩散；异常时回退到上一个已知版本，而不是手工改 Redis 桶。若新规则改变桶容量或算法，还要定义旧桶如何截断、重建或按版本并存，防止配置已回滚但状态没有回滚。",
+          "takeaway": "配置更新不是缓存刷新细节，而是一套可观测、可回滚的控制面协议。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "两个网关同时看到同一用户只剩一枚令牌，为什么 MULTI/EXEC 仍可能超发，你会怎样实现？",
+          "trigger": "候选人把 HMGET 放在事务外，或只说“Redis 命令原子”却没有覆盖读改写。",
+          "answer": "问题发生在事务开始前：A、B 都读到 tokens=1，各自算出可放行，然后依次写回 0，最终两个请求都通过。我要把取值、按 elapsed×refillRate 补充、截断到 capacity、扣一枚、写 last_refill 和设置 TTL 全部放进同一个 Lua 脚本，由 Redis 对该键串行执行。脚本返回同一次判定的 passes、remaining、resetTime，网关据此生成 429 头；键用 clientId 与 ruleId 组成，并在 Cluster 中用 hash tag 保证不跨 slot。若时钟倒退，elapsed 取零；规则版本变化则按版本选择迁移或重建桶，不能把旧参数悄悄套到新规则。",
+          "follow_up": "如果一次请求同时受用户、IP 和端点三条规则约束，你怎样避免扣了一条后另一条失败？",
+          "common_miss": "把 Redis 的单条 HSET 原子性误当成整个令牌桶判定原子，漏掉外部读取造成的竞态。",
+          "repair": "写出两个并发请求的交错步骤，再把所有会改变允许结果的操作圈进同一原子边界。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-rate-limiter",
+              "heading": "High-Level Design"
+            },
+            {
+              "source": "hi.deep.redis",
+              "heading": "Redis for Rate Limiting"
+            }
+          ]
+        },
+        {
+          "question": "全球多地域都要低于十毫秒判定，同时又声明每用户每分钟一百次，你如何解释一致性语义？",
+          "trigger": "候选人既承诺全球精确限额，又让每个地域独立写本地 Redis，没有说明冲突。",
+          "answer": "跨洲强同步一次令牌扣减通常无法守住十毫秒，因此我会先让产品选择“全球精确”还是“低延迟近似”。若接受有界误差，可把一百枚额度分配到各地域，例如按历史流量给 45/35/15，保留五枚中央应急池；每区只扣本地配额，周期性上报消耗并再平衡。用户跨区会暂时受较小额度，极端情况下总放行仍被已分配配额上界限制。若安全接口必须精确，则将该用户固定归属一个 home region，其他地域转发判定并接受更高延迟。无论哪种方案，都要监控配额耗尽率、跨区转发 p99 和切区期间的双写窗口。",
+          "follow_up": "home region 故障切换时，怎样避免旧区恢复后和新区同时发放令牌？",
+          "common_miss": "只说最终一致性可接受，却没有给误差上界、地域额度或用户可观察到的行为。",
+          "repair": "用一个一百枚额度的具体数字演算正常、跨区漫游和单区故障三个场景。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-rate-limiter",
+              "heading": "2) How do we ensure high availability and fault tolerance?"
+            },
+            {
+              "source": "hi.breakdown.distributed-rate-limiter",
+              "heading": "3) How do we minimize latency overhead?"
+            }
+          ]
+        },
+        {
+          "question": "一个企业 NAT 地址每秒发来五万次合法请求，单个 Redis 键已经打满，你会拆键吗？",
+          "trigger": "候选人看到热点就复制计数器或随机分片，没有考虑多个可写桶会扩大额度。",
+          "answer": "直接把同一 IP 的桶拆成十个独立可写键，会在并发和故障下把可用额度放大，除非事先把总额度严格切成子配额。我会先判断它是攻击还是共享身份：恶意源在 CDN/WAF 边缘封禁，避免流量抵达 Redis；合法企业客户应优先用 API key 或 userId 细分身份，并提供批量接口减少判定次数。若只能按 IP，可给该客户专属分片并把一万次总额度预分给若干网关，每份很小且短租约，到期不续就失效。这样热点被摊开，最大超发受“已发放但未消费的本地额度”限制。还要单独观察该键脚本耗时、额度租借量和封禁命中，而非只看集群平均 CPU。",
+          "follow_up": "本地小配额所在网关崩溃后，未消费令牌何时可以安全回收？",
+          "common_miss": "把热门 IP 一概当成攻击，或用读副本承接需要原子扣减的写热点。",
+          "repair": "先分类合法与恶意流量，再为合法场景写出子配额总和不超过全局额度的约束。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-rate-limiter",
+              "heading": "4) How do we handle hot keys (viral content scenarios)?"
+            },
+            {
+              "source": "ddia.ch7",
+              "heading": "倾斜的工作负载与缓解热点"
+            }
+          ]
+        },
+        {
+          "question": "安全团队要求十秒内把登录接口从每分钟一百次降到十次，怎样保证网关不会长期各用各的规则？",
+          "trigger": "候选人只说把规则放缓存，没定义传播时限、版本观测或失败实例处理。",
+          "answer": "配置库保存带单调版本的不可变规则，控制面推送“版本 42 可用”事件；网关收到事件后拉取完整快照、校验，再一次性把 activeVersion 从 41 切到 42，避免逐条更新产生混合规则。断线网关靠短周期轮询和启动时全量同步补漏，心跳持续上报 appliedVersion；十秒期限到达仍停在 41 的实例从负载均衡摘除，不能继续服务登录流量。规则从一百降到十时，已有桶按新容量截断，且判定日志记录 ruleVersion，方便解释同一时刻的不同结果。发布先灰度并观察误拒率，若配置错误则推送 43 号回滚版本，而不是让版本号倒退。",
+          "follow_up": "推送事件先到、规则快照后到，或同一版本重复送达时会发生什么？",
+          "common_miss": "把消息推送当作可靠广播，没有轮询兜底、版本水位和过期实例隔离。",
+          "repair": "补画控制面状态机：已发布、已拉取、已应用、超时摘除和新版本回滚。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-rate-limiter",
+              "heading": "5) How do we handle dynamic rule configuration?"
+            }
+          ]
+        },
+        {
+          "question": "一百万请求每秒的目标下，你如何计算 Redis 分片数并证明扩容不会破坏同一客户的限额？",
+          "trigger": "候选人直接说部署十台 Redis，没有用真实脚本吞吐、故障余量或重映射说明数字。",
+          "answer": "我先用生产等价 Lua、值大小和副本配置压测，假设单主节点在 p99 预算内只能稳定做八万次判定；一百万除以八万向上取整是十三个主分片。为容忍一台失效且平时不超过七成利用率，实际应再留至少百分之三十到四十余量，而不是恰好十三台。路由键取规范化的 client identity 加 ruleId，使同一桶永远落在一个 slot；Redis Cluster 的 16384 slots 或一致性哈希虚拟节点在加节点时只迁移部分键。迁移期间客户端正确处理 MOVED/ASK，且同一桶不能同时接受两个主写。验收看每分片判定 p99、slot 倾斜、迁移重试和超发估算。",
+          "follow_up": "如果一个 clientId 自身超过八万次每秒，为什么再加普通分片没有帮助？",
+          "common_miss": "用简单 GET 的峰值吞吐估算 Lua 判定，并忽略副本、故障和单热点键的串行瓶颈。",
+          "repair": "把目标 QPS、单分片安全值、利用率上限、N+1 故障和热点例外逐项写入容量表。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-rate-limiter",
+              "heading": "1) How do we scale to handle 1M requests/second?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Sharding and Partitioning"
+            },
+            {
+              "source": "hi.core.consistent-hashing",
+              "heading": "Virtual Nodes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "distributed-cache",
+      "title": "Distributed Cache",
+      "source": "hi.breakdown.distributed-cache",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "The API",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Distributed Cache 端到端设计图：标出 键、值、版本、过期时间与 LRU 元数据、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 set、get、delete、过期与淘汰如何落在同一分片 与 在低于十毫秒目标下定位分片并返回未过期值，每条箭头标明协议或数据。",
+          "明确 负责该键的主分片接受带版本写入并生成复制位置，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 键、值、版本、过期时间与 LRU 元数据，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we ensure our cache is highly available and fault tolerant?",
+          "2) How do we ensure our cache is scalable?",
+          "3) How can we ensure an even distribution of keys across our nodes?",
+          "4) What happens if you have a hot key that is being read from a lot?",
+          "5) What happens if you have a hot key that is being written to a lot?",
+          "6) How do we ensure our cache is performant?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.distributed-cache",
+        "deliverable": "提交 Distributed Cache 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 6 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.core.caching",
+          "heading": "Cache Eviction Policies",
+          "why": "把 LRU 与容量、访问模式和代价联系起来。"
+        },
+        {
+          "source": "hi.core.consistent-hashing",
+          "heading": "Virtual Nodes",
+          "why": "理解成员变化时的有限重映射和负载均衡。"
+        },
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "Read Replicas",
+          "why": "评估热读复制与陈旧窗口。"
+        },
+        {
+          "source": "hi.deep.redis",
+          "heading": "Redis as a Cache",
+          "why": "把缓存抽象落到可操作的数据结构、过期与性能边界。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch7",
+          "heading": "倾斜的工作负载与缓解热点",
+          "why": "识别热键而非只看平均负载。"
+        },
+        {
+          "source": "ddia.ch6",
+          "heading": "复制延迟的问题",
+          "why": "解释读副本陈旧与切主窗口。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "故障与部分失效",
+          "why": "设计节点失联时的诚实故障语义。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "先定义缓存 API 的可观察语义",
+          "body": "get(key) 不能只返回 value，还应区分命中、键不存在和键已过期；set(key,value,ttl) 要明确覆盖旧值是否重置 TTL，delete 是否幂等，以及最大 key、value 尺寸。缓存不是永久数据库，但一旦 set 已返回成功，客户端仍会期待在约定窗口内读到刚写的版本，因此每条记录至少包含 value、version、expireAt，并把 LRU 访问元数据视作淘汰提示而非业务数据。条件写可暴露 compare-and-set(expectedVersion)，帮助上层避免旧值覆盖新值。TTL 取绝对服务端时间还是相对时长也要固定，否则客户端时钟漂移会制造提前过期。接口语义写清后，才能讨论复制是保证已确认值存活，还是允许节点故障产生缓存未命中。",
+          "takeaway": "缓存可以丢，但 API 仍必须精确定义成功、过期、覆盖和条件更新。"
+        },
+        {
+          "title": "一致性哈希环负责找节点，不负责数据正确",
+          "body": "对 key 计算稳定哈希后顺时针找到节点，增减节点只搬动相邻区间；但物理节点数量少时分布会很不均，应该给每台机器放置多个 virtual nodes，并按内存容量分配不同数量。路由可放在客户端库，少一次代理跳转却让成员列表升级困难；也可经无状态 proxy，集中处理拓扑和重试但增加网络开销。成员变更必须有 epoch，客户端若按旧环把 set 发给旧所有者，应得到重定向而不是两个节点都接受写入。迁移采用先复制区间、校验水位、再切所有权，切换后旧节点只转发或拒绝。哈希环解决平均分配，无法解决单个热门键，因为这个键依然只有一个所有者。",
+          "takeaway": "虚拟节点改善区间均衡；epoch 和所有权切换才防止扩容期间双主写。"
+        },
+        {
+          "title": "主副本切换要明确允许丢失多少已确认写",
+          "body": "每个分片可设一个主节点和若干副本，get 分散到副本能提高读吞吐，但异步复制意味着副本可能读到旧值，主节点刚确认的 set 也可能在故障提升时丢失。若缓存用途允许把这次故障等价成 miss，就可优先可用性，并让上层回源重填；若上层把缓存当会话或锁存储，语义已不再是普通缓存，需要同步复制、仲裁或改用更合适的事实库。切主由带 epoch 的成员服务决定，新主只接受更高 epoch，旧主恢复后不能继续写。读己之写可以短时间粘到主节点，或让客户端携带 minVersion，副本落后就回主。高可用不是“有副本”四个字，而是故障检测、提升、路由刷新和陈旧窗口的完整协议。",
+          "takeaway": "先把节点故障解释为 miss、旧读还是已确认写丢失，再选择复制强度。"
+        },
+        {
+          "title": "TTL 与 LRU 都需要近似，否则维护成本会吞掉命中收益",
+          "body": "每次 get 先比较 expireAt，过期则按 miss 返回并异步清理，这是 lazy expiration；只靠惰性删除会让长期不访问的过期键占内存，因此后台还需分批扫描过期索引或随机采样，避免一次全表清扫造成延迟尖峰。精确 LRU 若每次读取都移动全局双向链表，在高并发下会形成写热点和锁竞争。生产实现常按分片维护近似 LRU，采样若干键的 lastAccess，或用分段队列区分新近与频繁访问。淘汰必须先确认条目版本，防止扫描线程删除刚被覆盖的新值；大 value 的释放也应脱离请求线程。监控 expired、evicted 和 overwritten 三类原因，才能判断是 TTL 设置、内存不足还是写入模式导致低命中。",
+          "takeaway": "过期保证语义，淘汰管理容量；两者的扫描与元数据更新都要有延迟预算。"
+        },
+        {
+          "title": "热读键和热写键是两种完全不同的问题",
+          "body": "热门配置被大量读取时，值不变或可短暂陈旧，可把副本扩到更多节点、在 proxy 做 request coalescing，甚至放进进程内 near-cache；版本或短 TTL 控制陈旧，单次回源填充防止缓存击穿。热门计数器被持续 set 时，复制并不会增加写吞吐，因为所有更新仍需在一个顺序上合并。可以检查业务是否允许按来源拆成子键再异步汇总，或把更新改成交换律操作；不允许拆分时只能给该键独立分片、批量合并并施加写入背压。随机复制出多个可写副本会发生覆盖和版本倒退。面试中应先问热点是读、写还是大对象网络带宽，再选方案，而不是统一回答“加副本”。",
+          "takeaway": "热读靠复制与合并请求；热写必须改变更新模型或承认单键顺序上限。"
+        },
+        {
+          "title": "低于十毫秒要优化整条尾延迟，而非只报内存速度",
+          "body": "内存查找是微秒级，但客户端建连、proxy 排队、序列化、跨可用区网络和副本超时会把 p99 推到十毫秒之外。客户端使用持久连接池，批量 mget/mset 降低往返；proxy 对大 value 设上限并避免无谓拷贝；分片线程按核隔离，后台过期扫描和再平衡限速。超时重试必须有总预算和同一拓扑 epoch，盲目向多个节点重试会在过载时放大流量。扩容后新节点没有热点数据，命中率骤降会把数据库压垮，所以迁移应预热或限速，并给回源加 single-flight 与并发上限。看板同时展示 get p50/p99、命中率、每分片内存、网络字节、eviction、热点键占比和客户端超时。",
+          "takeaway": "缓存性能是网络、排队、序列化、后台任务和回源压力共同决定的。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "只有三台物理缓存节点时，一致性哈希为什么仍可能严重偏斜，扩容迁移又怎样避免双写？",
+          "trigger": "候选人只画三个点的哈希环，就声称键会天然均匀且扩容无需协调。",
+          "answer": "三个随机落点会形成长度差异很大的区间，命中键数和内存压力不会自动均匀。我要让每台物理机拥有许多 virtual nodes，并按机器容量分配权重，使区间细化后更接近均摊；扩容时只把新节点接管的虚拟区间搬走。哈希仍只计算“按某份成员表应该去哪里”，所以拓扑要带单调 epoch：先把 A 的目标区间复制到 B，追平水位后切换所有权；B 只在新 epoch 接受写，A 随后只重定向旧客户端。这样虚拟节点处理分布与搬迁粒度，epoch 和切换顺序处理新旧路由并存时的双主风险。",
+          "follow_up": "客户端长时间离线后带着旧 epoch 重连，服务端返回什么信息才能安全自愈？",
+          "common_miss": "把有限重映射误说成原子拓扑变更，遗漏新旧路由并存的现实。",
+          "repair": "画出 copy、catch-up、cutover、redirect 四阶段，并标注每阶段唯一写入者。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-cache",
+              "heading": "3) How can we ensure an even distribution of keys across our nodes?"
+            },
+            {
+              "source": "hi.core.consistent-hashing",
+              "heading": "Virtual Nodes"
+            }
+          ]
+        },
+        {
+          "question": "一个键每秒读五十万次，另一个键每秒写五十万次，你会用同一种热点方案吗？",
+          "trigger": "候选人对所有热点都回答加读副本或加机器。",
+          "answer": "不会。热读值若允许几十毫秒陈旧，可复制到多个读副本，并在 proxy 或客户端 near-cache 中按版本缓存；首个 miss 用 single-flight 合并，避免所有请求同时回主。热写键则必须保持版本顺序，增加只读副本不会提高主节点处理 set 的能力。我要先找出更新是否可交换：计数器可拆成多个分片增量后汇总，普通覆盖写可按业务子键拆分；若语义要求严格的最后写入者，只能把该键隔离到专属分片、批量合并并对写方背压。两个场景分别监控副本陈旧度与主键队列长度，不能用集群平均 QPS 掩盖。",
+          "follow_up": "near-cache 在键被更新时怎样避免几千个客户端同时过期并回源？",
+          "common_miss": "用多个独立可写副本分摊热写，却没有冲突合并和版本单调保证。",
+          "repair": "把热点按读、写、value 大小三列分类，再为每列写可接受的陈旧或拒绝语义。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-cache",
+              "heading": "4) What happens if you have a hot key that is being read from a lot?"
+            },
+            {
+              "source": "hi.breakdown.distributed-cache",
+              "heading": "5) What happens if you have a hot key that is being written to a lot?"
+            },
+            {
+              "source": "hi.pattern.scaling-reads",
+              "heading": "Read Replicas"
+            }
+          ]
+        },
+        {
+          "question": "精确 LRU 为什么可能让缓存越优化越慢？你会如何保留淘汰效果而降低竞争？",
+          "trigger": "候选人声称每次 get 都更新一个全局 LRU 链表，却仍承诺极低尾延迟。",
+          "answer": "精确 LRU 使本来只读的 get 变成元数据写：每次命中都要从链表中摘下节点再移到头部，热门键会让同一锁或同一 cache line 被所有线程争抢，复制也会产生大量访问日志。更实际的做法是每个分片独立维护近似策略，例如只按采样概率更新 lastAccess，从若干候选中淘汰最旧者，或用 segmented LRU 把新对象和高频对象分开。过期键先由 get 惰性判断，再由限速后台扫描清理；淘汰线程删除前比较记录版本，避免误删刚 set 的新值。验收不追求理论顺序完全精确，而看命中率接近基线且 p99、锁等待和元数据写量明显下降。",
+          "follow_up": "如果 value 很大，淘汰释放内存本身阻塞请求线程，你怎样隔离这段工作？",
+          "common_miss": "只背诵 LRU 名称，不估算每次读取引入的写放大与全局锁竞争。",
+          "repair": "把一次 get 的数据访问与元数据维护分开计时，并用采样率设计对照实验。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-cache",
+              "heading": "3) Data should be evicted according to LRU policy"
+            },
+            {
+              "source": "hi.core.caching",
+              "heading": "Cache Eviction Policies"
+            }
+          ]
+        },
+        {
+          "question": "主缓存节点在 set 返回成功后立刻宕机，副本没有那条值；你的系统算正确还是丢数据？",
+          "trigger": "候选人说缓存无所谓一致性，同时又把它用于必须读己之写的状态。",
+          "answer": "答案取决于接口承诺，不能事后改口。普通加速缓存可以声明节点故障等价于 miss：set 的成功仅表示当前主已接收，切换后上层从数据库回源并重填；此时短暂丢值是设计内行为。若调用方依赖刚写即读，则 set 至少要等待一个副本确认，客户端在会话内携带 minVersion 或暂时读主，副本落后就不能返回旧值。再高的耐久要求说明这个组件已被当作事实库，应选择带日志和仲裁的存储，而不是继续叫缓存。切主还需提升 epoch，旧主恢复只能丢弃或转交未确认数据，绝不能以旧版本覆盖新主。",
+          "follow_up": "等待一个副本后，网络分区把主和已确认副本隔开，哪一侧继续接受写？",
+          "common_miss": "用“最终一致”掩盖已确认写可能消失，没有说明调用方应回源、重试还是接受旧读。",
+          "repair": "为 set 写一条明确 SLA：确认条件、故障后的读行为和不适合承载的数据类型。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-cache",
+              "heading": "1) How do we ensure our cache is highly available and fault tolerant?"
+            },
+            {
+              "source": "ddia.ch6",
+              "heading": "复制延迟的问题"
+            }
+          ]
+        },
+        {
+          "question": "缓存平时 p99 为三毫秒，扩容后却拖垮数据库，你会怎样解释并修复？",
+          "trigger": "候选人只看缓存节点 CPU 和延迟，忽略迁移造成的冷启动与回源放大。",
+          "answer": "新增节点接管一批哈希区间时内存是空的，原本的命中会变成 miss；若十万客户端同时请求热门键，就形成回源风暴，数据库先饱和，随后缓存请求也因排队超时。扩容流程应限速搬迁并预热已知热点，proxy 对同一键用 single-flight 只允许一个回源，其余等待结果；数据库回源设置全局并发上限，超过时优先返回短期旧值或明确降级，而不是无限重试。监控需要把 hit ratio 按分片和新旧节点拆开，并联看 DB QPS、最老回源等待、客户端超时和重试放大。只有新节点命中率与尾延迟稳定后才继续搬下一区间。",
+          "follow_up": "如果旧值已经过 TTL，你是否愿意 stale-while-revalidate，边界由谁决定？",
+          "common_miss": "认为加节点必然降低负载，没看到数据迁移会暂时把缓存容量变成数据库压力。",
+          "repair": "给扩容 runbook 加上预热、single-flight、回源限额和暂停迁移的阈值。",
+          "sources": [
+            {
+              "source": "hi.breakdown.distributed-cache",
+              "heading": "6) How do we ensure our cache is performant?"
+            },
+            {
+              "source": "hi.deep.redis",
+              "heading": "Redis as a Cache"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "job-scheduler",
+      "title": "Job Scheduler",
+      "source": "hi.breakdown.job-scheduler",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "The API",
+          "Data Flow",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Job Scheduler 端到端设计图：标出 作业定义、下一次触发时间与执行尝试、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 创建或更新计划后如何产生到期执行并安全认领 与 按时间窗发现即将到期作业并查询每次尝试状态，每条箭头标明协议或数据。",
+          "明确 调度器以条件写创建唯一 executionId 或推进其 claim epoch，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 作业定义、下一次触发时间与执行尝试，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we ensure the system executes jobs within 2s of their scheduled time?",
+          "2) How can we ensure the system is scalable to support up to 10k jobs per second?",
+          "3) How can we ensure at-least-once execution of jobs?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.job-scheduler",
+        "deliverable": "提交 Job Scheduler 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 3 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Workers",
+          "why": "把调度与实际执行解耦并设计进度、重试。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Handling Bursts with Queues and Load Shedding",
+          "why": "吸收同时到期的突发并实施背压。"
+        },
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Distributed Locks",
+          "why": "理解租约认领与 fencing 的边界。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Indexing for Access Patterns",
+          "why": "从按时间窗扫描和按作业查状态反推索引。"
+        },
+        {
+          "source": "hi.deep.zookeeper",
+          "heading": "ZooKeeper for Leader Election",
+          "why": "理解调度分片所有权、会话失效与新 leader 接管。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch11",
+          "heading": "工作流调度",
+          "why": "连接作业依赖、调度与执行模型。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "支撑至少一次投递下的安全重试。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "分布式锁和租约",
+          "why": "防止过期 worker 提交结果。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "把一次性、延时与周期任务统一成明确的数据模型",
+          "body": "JobDefinition 保存用户要执行的命令、时区、重试策略和 cron 表达式；JobRun 表示某次具体触发，拥有 runId、scheduledAt、attempt 和状态。一次性任务只产生一个 run，周期任务不能让 worker 执行完后随手算下一次，否则 worker 崩溃会漏排；调度器应根据 definition 的 nextRunAt 事务地产生 JobRun，并推进下一触发时间。cron 必须绑定 IANA 时区，夏令时跳过或重复的本地时间要事先规定“跳过一次、执行一次还是执行两次”。取消定义只阻止未来 run，是否中断已经 running 的实例是另一条 API。把定义与执行分开，才能回答修改计划、补跑、重试和审计时究竟影响哪一个对象。",
+          "takeaway": "JobDefinition 描述意图，JobRun 记录每次执行；不要用一个 status 字段混合两者。"
+        },
+        {
+          "title": "两秒准点目标来自 due 索引、扫描步长和队列延迟",
+          "body": "若每秒全表查 scheduledAt 小于现在，数据量一大就无法守住两秒。可按 nextRunAt 建组合索引，并把时间切成秒级或更细的 bucket；多个 scheduler 各负责一组时间分区，提前读取未来一小段 lookahead，把到期 run 放入延时队列。误差预算要拆开：数据库扫描五百毫秒、入队三百毫秒、broker 排队四百毫秒、worker 领取四百毫秒，还需给网络抖动留余量。lookahead 太长会让取消和改期难以及时生效，太短又容易被一次暂停错过。调度器重启后从持久水位回扫最近窗口，按 runId 去重。墙上时钟只用于判定计划时刻，进程内等待应使用单调时钟，避免 NTP 回拨造成重复触发。",
+          "takeaway": "准点不是一个组件属性，要为扫描、排队、领取和时钟误差分别分配预算。"
+        },
+        {
+          "title": "领取任务要靠租约和 fencing token，而不是永久锁",
+          "body": "worker 从队列得到 runId 后，以条件更新把状态从 QUEUED 改为 RUNNING，同时写 owner、leaseUntil、attempt 和递增 fencingToken。租约允许 worker 崩溃后由 reaper 重新入队；但旧 worker 可能只是长时间 GC，醒来后仍继续写结果，所以所有受保护的下游更新都必须携带 fencingToken，下游拒绝小于当前值的操作。只用 Redis SETNX 加过期时间无法阻止过期持有者。长任务按心跳续租，续租失败就停止产生副作用；短任务可一次执行完再提交。scheduler leader election 只决定谁扫描某个分区，不能替代每个 JobRun 的领取原子性。租约长度应大于正常心跳抖动，又不能长到故障后数分钟无人接管。",
+          "takeaway": "租约解决可接管，fencing token 解决旧持有者复活后继续写。"
+        },
+        {
+          "title": "至少一次执行不等于业务副作用可以重复",
+          "body": "worker 完成付款后、把 JobRun 标成 SUCCEEDED 前宕机，系统只能重新投递，因此调度层最多保证至少一次；所谓 exactly-once 若跨越外部系统通常只是把重复隐藏在幂等协议里。每个 runId 是稳定幂等键，调用支持幂等的下游时直接传递；写自有数据库时，在同一事务中记录 effect(runId) 和业务变更，重复 attempt 读到 effect 就返回原结果。若还要发事件，用 transactional outbox 随状态提交，再由 relay 重发。对不可幂等的邮件或第三方命令，要在产品层接受可能重复、改成人工确认，或引入可查询的供应商请求 ID。重试策略区分瞬时、永久和未知结果，未知不能直接当失败重做。",
+          "takeaway": "调度器负责重投；业务处理器必须用 runId 把重投收敛为一次可见效果。"
+        },
+        {
+          "title": "一万任务每秒需要按时间与租户双重隔离",
+          "body": "一万 run/s 不只是队列吞吐，还包含写 JobRun、扫描、入队、状态心跳、完成写和重试，若平均每个 run 有六次持久操作就是六万次写每秒。按 scheduledAt bucket 分区能并行扫描，但某个整点可能聚集大量 cron；可给用户加入可声明的 jitter，把非严格任务散到几十秒窗口。broker 按 tenantId 或 jobType 分区，worker pool 按资源类型隔离，避免一个慢视频任务占满执行线程。每租户设置并发额度与加权公平队列，超过总容量时先拒绝新低优先级计划或延迟非关键 run，而不是让所有任务共同超时。扩容信号看 oldest-due age 与 schedule-to-start p99，队列长度本身无法区分正常长任务和调度已经迟到。",
+          "takeaway": "把一次 run 的写放大算全，并用时间分桶、资源池和租户配额控制整点洪峰。"
+        },
+        {
+          "title": "状态机、重试与补跑共同构成可运营的调度器",
+          "body": "JobRun 的合法转换可限定为 SCHEDULED→QUEUED→RUNNING→SUCCEEDED/FAILED，租约过期产生新 attempt 而不是把历史覆盖掉；CANCEL_REQUESTED 需要 worker 协作确认，不能在控制面直接伪造 CANCELLED。重试由 retryAt 索引重新进入调度路径，指数退避带随机抖动，并为永久错误进入 dead-letter 状态。运维页面要显示 scheduledAt、startedAt、attempt、owner、最后心跳和错误分类，使用户能区分“尚未到期、排队、正在运行、结果未知”。补跑按 definition 和时间范围生成新的 runId，并记录 parentRunId，防止和自动重试混淆。核心 SLO 是两秒内开始比例、重复副作用数、租约接管时间、最老到期任务年龄和死信增长率。",
+          "takeaway": "保留每次 attempt 的证据，才能安全重试、解释延迟并做有边界的补跑。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "要求任务在计划时间两秒内开始，你会怎样从数据模型推导扫描频率与延迟预算？",
+          "trigger": "候选人只说每秒轮询数据库，没有索引、分区、lookahead 或端到端预算。",
+          "answer": "我把 schedule-to-start 拆成四段：到期发现五百毫秒、持久化领取或入队三百毫秒、broker 排队四百毫秒、worker 领取四百毫秒，余下四百毫秒留给网络和抖动。JobRun 以 (timeBucket, scheduledAt, runId) 建索引，scheduler 分片每二百五十毫秒读取自己负责的近期 bucket，并用一秒 lookahead 提前放入支持 deliverAt 的队列。runId 唯一约束使重叠扫描不会重复创建；进程中断后从持久水位向前回扫。看板直接量 scheduledAt 到 startedAt 的 p99 和 oldest-due age，某一段超预算就定位到扫描、broker 或 worker，而不是笼统加机器。",
+          "follow_up": "数据库停顿三秒后恢复，如何补扫而不让同一 run 被入队多次？",
+          "common_miss": "把两秒理解为调度器轮询间隔，忽略索引查询、排队和 worker 饱和也消耗时间。",
+          "repair": "画一条带毫秒数字的到期时序，并给 runId 唯一约束和回扫水位加故障测试。",
+          "sources": [
+            {
+              "source": "hi.breakdown.job-scheduler",
+              "heading": "1) How can we ensure the system executes jobs within 2s of their scheduled time?"
+            },
+            {
+              "source": "hi.core.data-modeling",
+              "heading": "Indexing for Access Patterns"
+            }
+          ]
+        },
+        {
+          "question": "用户在纽约创建“每天凌晨 2:30”任务，夏令时切换那天没有这个时间，你的系统做什么？",
+          "trigger": "候选人只存 cron 字符串或 UTC 时间，没保留时区与歧义策略。",
+          "answer": "JobDefinition 必须保存 cron、IANA zoneId 和明确的 DST policy，不能在创建时永久换算成固定 UTC。春季跳时导致 2:30 不存在时，产品可选择跳过本次或在下一个有效时刻执行；秋季 1:30 出现两次时，要规定执行一次还是两次。我的默认是跳过不存在的本地时刻、重复时刻只执行一次，并把解析出的 scheduledAt UTC 与 localOccurrenceKey 一起写入 JobRun；唯一约束使用 definitionId+localOccurrenceKey，防止重算重复。规则变更要版本化，历史 run 保留当时的 zone 与 policy。测试必须覆盖两次 DST 边界、时区数据库升级和 NTP 回拨。",
+          "follow_up": "用户把时区从纽约改成洛杉矶，已经生成到队列里的未来 run 如何处理？",
+          "common_miss": "认为全部存 UTC 就解决周期语义，却丢失用户表达的本地日历规则。",
+          "repair": "为 cron 模型补 zoneId、DST policy、definitionVersion 与本地 occurrence 唯一键。",
+          "sources": [
+            {
+              "source": "hi.breakdown.job-scheduler",
+              "heading": "1) Users should be able to schedule jobs to be executed immediately, at a future date, or on a recurring schedule"
+            }
+          ]
+        },
+        {
+          "question": "worker 已经向支付服务扣款，尚未确认任务就崩溃；至少一次执行怎样避免再次扣款？",
+          "trigger": "候选人把消息 ack 和业务提交当成一个原子动作，或承诺跨系统 exactly-once。",
+          "answer": "恢复后的 worker 必然可能再次收到同一 run，所以 runId 要作为下游幂等键。支付服务首次处理时把 runId 与 chargeId 建唯一映射并返回结果，重复调用只返回原 chargeId；调度器拿到结果后把 attempt 完成。若支付请求超时，worker先按 runId 查询支付状态，确认不存在才重试，不能把超时解释为未扣款。对于自有数据库，业务变更与 processed_run(runId) 在同一事务提交；随后要发事件则用 outbox。这样 broker 的重复投递、worker 崩溃和 ack 丢失都只产生重复尝试，不产生第二个可见副作用。无法提供幂等接口的外部动作必须暴露人工核对或可能重复的契约。",
+          "follow_up": "幂等记录保留多久，周期任务多年后 runId 是否可能碰撞或被清理？",
+          "common_miss": "回答“先执行再 ack”就结束，没有处理执行成功但 ack 丢失的结果未知窗口。",
+          "repair": "用扣款实例写出首次调用、超时查询、重复投递和返回原结果四条路径。",
+          "sources": [
+            {
+              "source": "hi.breakdown.job-scheduler",
+              "heading": "3) How can we ensure at-least-once execution of jobs?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "幂等性"
+            }
+          ]
+        },
+        {
+          "question": "任务租约到期后新 worker 已接管，旧 worker 从长时间 GC 中醒来，如何阻止它继续写结果？",
+          "trigger": "候选人只给分布式锁设置 TTL，默认过期持有者会自动停止。",
+          "answer": "锁过期不会终止旧进程，所以每次领取 JobRun 都要原子递增 fencingToken。新 worker 拿到 token 58 后，下游受保护资源记住见过的最大 token；旧 worker 带 57 写入时即使网络已恢复也被拒绝。worker 心跳续租失败后应主动停止，但 fencing 是最后防线。reaper 只有在 leaseUntil 超时并确认 attempt 仍为 RUNNING 时才重新入队，接管产生新的 attempt 记录，历史错误不被覆盖。ZooKeeper 选 leader 可避免多个 scheduler 扫同一分区，却不能替代 run 级 token，因为 leader 或 worker 都可能在网络分区中成为僵尸持有者。",
+          "follow_up": "第三方 HTTP 服务不理解 fencing token 时，你还能提供什么保护？",
+          "common_miss": "把租约当作撤销旧 worker 的远程开关，漏掉暂停、GC 和网络分区后的复活。",
+          "repair": "在故障时序中加入旧 worker 恢复，并要求下游用 token 单调比较拒绝旧写。",
+          "sources": [
+            {
+              "source": "hi.pattern.dealing-with-contention",
+              "heading": "Distributed Locks"
+            },
+            {
+              "source": "ddia.ch9",
+              "heading": "分布式锁和租约"
+            },
+            {
+              "source": "hi.deep.zookeeper",
+              "heading": "ZooKeeper for Leader Election"
+            }
+          ]
+        },
+        {
+          "question": "每天整点有十万条 cron 同时到期，但平均只有一万任务每秒，你怎样避免准点 SLO 全线失守？",
+          "trigger": "候选人用日均或分钟平均容量估算，没有整点突发、租户公平和拒绝策略。",
+          "answer": "十万条在两秒内开始意味着瞬时需要五万 run/s，不能拿一万的长期平均掩盖。我会先允许非严格任务在创建时声明例如三十秒 jitter，把备份、报表等工作散开；严格任务保留原时刻并按优先级占用预留 worker。到期 bucket 内读取后进入按 tenant 加权的队列，每租户有并发额度，防止一个客户占满所有执行槽。worker pool 按 CPU、IO 和长任务类型隔离，broker 积压超过阈值时延迟低优先级任务并拒绝新的非关键计划。容量测试要把写 JobRun、入队、心跳和完成更新的放大都算入，并以 schedule-to-start p99 与 oldest-due age 触发扩容或负载卸载。",
+          "follow_up": "如果所有十万条都声明为严格高优先级，你对产品给出什么容量或拒绝契约？",
+          "common_miss": "只增加队列分区，未解决 worker 执行能力、数据库写放大和租户争用。",
+          "repair": "重做整点两秒窗口的峰值计算，并明确哪些任务可抖动、降级、延迟或拒绝。",
+          "sources": [
+            {
+              "source": "hi.breakdown.job-scheduler",
+              "heading": "2) How can we ensure the system is scalable to support up to 10k jobs per second?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Handling Bursts with Queues and Load Shedding"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

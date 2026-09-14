@@ -1,0 +1,62 @@
+{
+  "title": "Kafka in System Design",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "pipeline",
+  "summary": "Kafka 适合把事件写入可扩展的分区日志，让生产者和消费者解耦并支持重放。",
+  "task": "为实时事件或异步处理路径选择消息系统，并说明分区、顺序和失败语义。",
+  "constraints": [
+    "消息要小，Kafka 里放指针，不放大文件",
+    "同一个 key 进入同一个 partition 才能保证局部顺序",
+    "默认至少一次投递，消费者要能处理重复"
+  ],
+  "blocks": [
+    {
+      "id": "producer",
+      "kind": "component",
+      "title": "Producer 先选顺序维度",
+      "body": "事件的有序维度决定 partition key。这个 key 决定消息进入哪个 partition，也决定后续并行度和热点风险。"
+    },
+    {
+      "id": "topic",
+      "kind": "queue",
+      "title": "Topic 表达业务事件流",
+      "body": "Topic 表达业务事件流，不只是队列名。Topic 边界按消费语义拆分，避免一个 topic 混入太多不相关事件。"
+    },
+    {
+      "id": "partition",
+      "kind": "component",
+      "title": "Partition 只保证局部顺序",
+      "body": "Kafka 的顺序保证是在 partition 内成立，不是整个 topic 全局有序。要全局顺序通常意味着牺牲并行度。"
+    },
+    {
+      "id": "consumer",
+      "kind": "service",
+      "title": "Consumer group 决定并行度",
+      "body": "同一个 consumer group 里，一个 partition 同时只给一个 consumer 处理。扩容消费者之前，要确认 partition 数量和处理耗时。"
+    },
+    {
+      "id": "sink",
+      "kind": "database",
+      "title": "副作用成功后再提交 offset",
+      "body": "默认按至少一次语义设计。数据库写入或外部副作用成功后再提交 offset，因此消费者逻辑必须幂等。"
+    }
+  ],
+  "connectors": [
+    {"from": "producer", "to": "topic", "label": "publish"},
+    {"from": "topic", "to": "partition", "label": "hash(key)"},
+    {"from": "partition", "to": "consumer", "label": "poll + offset"},
+    {"from": "consumer", "to": "sink", "label": "process then commit"}
+  ],
+  "callouts": [
+    {
+      "title": "Senior caveat",
+      "body": "Hot partition comes from a bad key. Fix with salting, compound keys, or back pressure."
+    },
+    {
+      "title": "Retry path",
+      "body": "For poison messages, use retry topic + DLQ instead of blocking the main stream."
+    }
+  ],
+  "talk_track": "Kafka 我会先讲清楚 topic、partition、producer、consumer group，而不是只说“加个队列”。关键决策是 partition key：它决定顺序、并行度和 hot partition 风险。消费者默认至少一次，所以 side effect 要幂等，offset 要在真正处理成功后再提交。"
+}

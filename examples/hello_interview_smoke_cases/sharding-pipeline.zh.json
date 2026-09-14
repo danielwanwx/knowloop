@@ -1,0 +1,52 @@
+{
+  "title": "Sharding Decision Flow",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "pipeline",
+  "summary": "分片是把数据和流量拆到多台机器上，但 shard key 决定扩展性和查询代价。",
+  "task": "当单库容量、写吞吐或热点流量撑不住时，说明如何分片。",
+  "constraints": [
+    "先确认是容量瓶颈、写瓶颈，还是单租户热点",
+    "好的 shard key 要高基数、分布均匀，并匹配主要查询路径",
+    "跨 shard 查询、事务和 rebalancing 是主要代价"
+  ],
+  "blocks": [
+    {
+      "id": "bottleneck",
+      "kind": "component",
+      "title": "1. Prove the single DB is the bottleneck",
+      "body": "分片前先确认瓶颈是容量、写吞吐，还是某个租户/地区造成热点。三种瓶颈对应不同 shard key 和迁移策略。"
+    },
+    {
+      "id": "key",
+      "kind": "component",
+      "title": "2. Pick a key that matches access",
+      "body": "好的 shard key 要高基数、分布均匀，并贴合主要查询路径。否则分片之后只是把问题分散成更多问题。"
+    },
+    {
+      "id": "route",
+      "kind": "component",
+      "title": "3. Route without leaking complexity",
+      "body": "请求需要通过 router、metadata 或 client library 找到 shard。应用层不应该到处硬编码分片规则。"
+    },
+    {
+      "id": "rebalance",
+      "kind": "component",
+      "title": "4. Rebalance without stopping traffic",
+      "body": "迁移要渐进做，常见做法是移动 range、双读双写或后台校验。不能假设扩容时系统可以停机。"
+    },
+    {
+      "id": "tradeoff",
+      "kind": "caveat",
+      "title": "Trade-off: cross-shard work gets expensive",
+      "body": "分片会让跨 shard join、事务和全局排序变难。受影响的查询需要改写、异步汇总或单独的聚合索引。"
+    }
+  ],
+  "callouts": [
+    {
+      "title": "设计边界",
+      "body": "分片解决扩展性，但会把复杂度转移到路由、迁移、跨 shard 查询和事务语义上。"
+    }
+  ],
+  "talk_track": "我会先确认单库到底哪里撑不住：数据量、写入吞吐，还是热点租户。然后选 shard key，标准是分布均匀并贴合主要查询路径。分片解决扩展性，但会引入跨 shard 查询、事务和迁移成本，所以需要路由层和渐进 rebalancing。"
+}

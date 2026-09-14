@@ -1,0 +1,4 @@
+interface:
+  display_name: "Senior SDE Interview Script"
+  short_description: "Craft senior interview answers"
+  default_prompt: "Use $senior-sde-interview-script to turn this topic into a concise senior interview answer with a supporting whiteboard sketch."

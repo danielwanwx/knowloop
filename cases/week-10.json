@@ -1,0 +1,643 @@
+{
+  "week": 10,
+  "theme": "指标、事件聚合与近似计算",
+  "audio_preview": {
+    "title": "Week 10｜Metrics、广告点击与 Top K 两分钟预听",
+    "script": "这一周训练如何把持续事件变成可信的派生视图。Metrics Monitoring 接收高基数时间序列，既要让仪表盘读数快，又要在一分钟内评估告警；Ad Click Aggregator 先保证用户跳转，再把点击事件耐久写入流，用窗口聚合给广告主分钟级报表；YouTube Top K 则比较精确计数、分层聚合、滑动窗口和 Count-Min Sketch 等近似方法。三题的共同陷阱是说“用 Kafka 加 Flink 就 exactly once”。真正要讲的是 event_id、分区键、event time、watermark、checkpoint、幂等 sink 和重算来源。迟到事件会不会修改已展示结果，告警会不会重复通知，近似误差是否能被产品接受，都必须写成显式契约。存储也不是一张无限增长的表：原始粒度按保留策略下沉，常用窗口预聚合，查询根据时间范围选择合适分辨率。深挖时用 cardinality、ingest lag、watermark delay、alert evaluation age、duplicate rate 和 approximation error 验证设计。学完后，你应能从一个看似简单的 count 题，讲到时间语义、故障恢复、查询成本和业务账目之间的完整边界。练习时还要为每个投影写出权威原始数据、版本切换、回放范围与对账阈值，并模拟消费者重启、分区倾斜和迟到洪峰，证明恢复过程不会把旧结果重新覆盖新结果。"
+  },
+  "projects": [
+    {
+      "slug": "metrics-monitoring",
+      "title": "Metrics Monitoring",
+      "source": "hi.breakdown.metrics-monitoring",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "Data Flow",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 agent/remote-write、ingest validation、partitioned TSDB、rollup、query fanout、dashboard cache、rule evaluator 和 notification 的 Metrics Monitoring 白板。",
+        "acceptance": [
+          "metric identity、labels、sample timestamp 与 retention 组成清晰数据模型，并有 cardinality guardrail。",
+          "写路径和查询路径分离，长时间范围自动选择 rollup 而非扫描原始样本。",
+          "告警 evaluation、state、dedupe、silence 和 notification retry 都有持久状态。"
+        ],
+        "repair": "若设计只有 Kafka、TSDB、Grafana 三个盒子，补写 sample schema、partition key、rollup resolution、rule state 与每段 lag 指标。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we serve low-latency dashboard queries over weeks of data?",
+          "2) How do we reduce alert latency below 1 minute?",
+          "3) How do we ensure high availability during spikes and failures?",
+          "4) How do we handle cardinality explosion?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.metrics-monitoring",
+        "deliverable": "time partition/rollup 查询计划、低延迟 rule evaluation、写入背压与多副本、cardinality budget 和 alert dedupe runbook。",
+        "acceptance": [
+          "一周 dashboard 查询能解释 resolution 选择、partition pruning、并行 fanout 和 cache。",
+          "一分钟告警预算拆成 ingest、stream/evaluation、state commit 与 notification 四段。",
+          "恶意或错误标签造成基数爆炸时有准入、配额、降级和租户隔离。"
+        ],
+        "repair": "回答性能时先写 query range×series×resolution；回答告警时画 sample timestamp 到 notification timestamp 的 waterfall，并为每段设阈值。"
+      },
+      "concepts": [
+        {
+          "source": "hi.deep.time-series-databases",
+          "heading": "Time-Based Partitioning (Sharding by Time)",
+          "why": "按时间裁剪查询与保留删除，避免全库扫描。"
+        },
+        {
+          "source": "hi.deep.time-series-databases",
+          "heading": "Downsampling and Rollups",
+          "why": "用不同分辨率服务长时间范围 dashboard。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Batching and Hierarchical Aggregation",
+          "why": "合并高频样本和预聚合，减少写与查询成本。"
+        },
+        {
+          "source": "hi.deep.kafka",
+          "heading": "Handling Retries and Errors",
+          "why": "处理 ingest 重试、重复样本和 poison batch。"
+        },
+        {
+          "source": "hi.deep.flink",
+          "heading": "State Management",
+          "why": "维护窗口、rule state 与 checkpoint 恢复。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch12",
+          "heading": "时间推理",
+          "why": "区分 sample event time、ingest time 和告警计算时间。"
+        },
+        {
+          "source": "ddia.ch4",
+          "heading": "日志结构存储",
+          "why": "理解高写入时间序列存储的顺序写、compaction 与读放大。"
+        },
+        {
+          "source": "ddia.ch7",
+          "heading": "倾斜的工作负载与缓解热点",
+          "why": "处理单租户、单 metric 或高基数标签形成的热点。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "Metric identity 决定基数与成本",
+          "body": "一条 sample 包含 metric name、label set、timestamp 和 value；name+规范化 labels 定义 series ID。label 必须限制长度、数量和值域，禁止 request_id、user_id 等无界维度，否则每个请求都会创建新 series。接入层认证租户、校验时间、去重 batch 并计算 cardinality budget，超限时拒绝或丢弃低优先级标签，而不是等 TSDB 崩溃。metadata catalog 记录 series 生命周期和 owner，帮助查询、配额与清理。系统按 active series、new series rate、bytes/sample 和 rejected labels 计费与报警。容量评审还要按租户估算高峰 active series、采样频率和保留期，确认预算变化有审批、灰度和回滚记录。预算告警必须早于硬拒绝。",
+          "takeaway": "标签设计是容量协议；基数在入口治理，不能只靠扩容。"
+        },
+        {
+          "title": "写路径按时间与 series 分布",
+          "body": "agent 批量 remote-write，携带 batch/request ID；ingest gateway 做限流、压缩解码和时间范围校验，再按 tenant+series hash 路由到 owner。内存 buffer/WAL 先耐久接收，随后形成按时间排序的 block 写入对象或本地存储，catalog 更新 block 元数据。相同 timestamp 的重复样本按明确规则去重，迟到样本进入仍可写时间窗或 side path。队列积压时先保护最近高优先级指标，降低 scrape 频率或拒绝低价值租户，不能无限缓存。故障演练应覆盖确认响应丢失、owner 转移和 WAL 重放，逐条验证 batch 去重、block 元数据提交与采样缺口。",
+          "takeaway": "批量、WAL、稳定分区和背压共同支撑高吞吐写入。"
+        },
+        {
+          "title": "长范围查询需要 rollup 与 partition pruning",
+          "body": "dashboard 查询先解析 label matcher，从 catalog 找 series 和覆盖时间段的 blocks；按时间裁剪分区并行读取。短范围选择原始粒度，数天或数周范围自动选择 1m、5m 等 rollup，避免返回超过屏幕像素的无意义点。rollup 保存 count、sum、min、max 及必要分位结构，不能只存 average 后丢掉可组合性。query coordinator 限制 fanout、合并结果并缓存规范化 query+resolution；部分 shard 超时可返回明确 partial 标记，而不是静默少数据。rollup 延迟或纠错时要按数据 watermark 失效缓存，并以抽样原始查询对比聚合误差和缺失分区。",
+          "takeaway": "查询计划根据时间范围和展示分辨率选择最小必要数据。"
+        },
+        {
+          "title": "告警是一台持久化状态机",
+          "body": "rule evaluator 按固定 schedule 或样本流触发，读取窗口聚合后维护 inactive、pending、firing、resolved 状态。for:5m 之类规则不能因一次采样缺失立即 firing，也不能在 evaluator 重启后忘记 pending 时长；状态和 last_evaluated watermark 要 checkpoint。通知以 alert fingerprint 去重，支持 silence、grouping、retry 与 resolved event。多副本 evaluator 需要明确 leader/partition ownership 或幂等 sink，避免双重通知。指标包括 evaluation lag、state recovery、notification latency 和 duplicate alert。规则版本、时钟偏差和缺失数据策略也必须入状态；用合成样本验证 pending 时长、恢复后续算和 resolved 通知顺序。配置发布采用影子评估，先比较新旧规则触发差异，再切换 owner 读取的活动版本，避免一次语法或阈值错误制造通知风暴。",
+          "takeaway": "低延迟告警不仅是快速查询，还要有持续状态、去重和恢复。"
+        },
+        {
+          "title": "高可用先隔离租户和工作负载",
+          "body": "监控系统在事故时负载反而最高，因此写入、dashboard 和 alert 不能共享无界资源。按租户和优先级设置 queue、CPU、series 与 query fanout 配额；alert evaluation 保留独立容量，重型 ad-hoc 查询可排队或降采样。ingest owner 使用多副本和 WAL，region 故障时客户端缓冲并重试；查询可读取对象存储和 surviving replica，标记 partial。恢复时限制 replay 与 cache rebuild，避免二次雪崩。关键指标按租户观察 oldest ingest、query queue、rule lag 和 dropped samples。区域切换演练需记录允许的数据缺口、告警接管时间与回放速率，确保恢复流量不会挤占新的实时样本。",
+          "takeaway": "事故负载下优先保护写入和告警，探索查询必须有资源边界。"
+        },
+        {
+          "title": "Cardinality explosion 要有产品化修复",
+          "body": "发现 active series 或 new-series rate 异常时，先按 tenant、metric、label key 找 top contributors，并阻止继续创建无界 series；已有数据仍可查询和按 retention 清理。系统可提供 label lint、预算预警和采样预览，让团队在上线前发现 request_id 一类错误。紧急降级可以删除非 allowlist 标签、降低 scrape 或限制新 series，但要记录被变换的数据语义，不能悄悄合并导致错误告警。修复后回填 dashboard/rule mapping，评估存储、compaction 和查询缓存恢复时间。验收要对比变换前后的查询与告警集合，并确认预算恢复后不会一次性重建所有被拒绝的 series。",
+          "takeaway": "基数治理包含预防、定位、限流和语义可见的降级。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "查询数周数据如何保持低延迟，同时不返回错误平均值？",
+          "trigger": "候选人只说 downsample，没有可组合统计量。",
+          "answer": "query planner 根据时间范围和目标像素选择原始、1m 或 5m rollup，并按时间 partition pruning。每个 rollup bucket 保存 count、sum、min、max，必要时保存可合并的 histogram/sketch；跨 bucket 平均用总 sum/总 count，不能平均各 bucket 的 average。label matcher 先从 catalog 缩小 series，block 并行读但限制 fanout，结果缓存绑定 query、resolution 和 data watermark。缺 shard 时返回 partial/error。监控 scanned bytes、series count、resolution、cache hit 和 partial rate，才能验证低延迟没有牺牲正确性。再用固定金丝雀查询同时读取原始与 rollup，持续校验聚合版本、桶边界和纠错后的缓存失效。",
+          "follow_up": "p99 latency 的 rollup 为什么不能简单取每分钟 p99 的最大或平均？",
+          "common_miss": "平均的平均、分位数的平均造成统计错误。",
+          "repair": "用两个 count 不同的 bucket 手算 average，并说明 histogram 合并。",
+          "sources": [
+            {
+              "source": "hi.breakdown.metrics-monitoring",
+              "heading": "1) How do we serve low-latency dashboard queries over weeks of data?"
+            },
+            {
+              "source": "hi.deep.time-series-databases",
+              "heading": "Downsampling and Rollups"
+            }
+          ]
+        },
+        {
+          "question": "怎样把 alert latency 降到一分钟以内并证明达标？",
+          "trigger": "候选人只缩短 cron interval，没有端到端预算。",
+          "answer": "从 sample event_time 开始分解：agent batch/网络、ingest queue、WAL/stream、rule evaluation、state commit 和 notification delivery。给各段设预算与 timestamp，按 p95/p99 观测。关键规则可由流式增量状态更新，普通规则周期查询；evaluator 按 tenant/rule 分区并 checkpoint，lag 超标时扩容或减少低优先级规则。通知 sink 以 alert fingerprint 幂等，并监控 provider retry。事件晚到时依据 watermark 决定修正或记录 late sample，不能为了“快”永久漏掉真实异常。上线前持续注入带已知 event_time 的合成异常，端到端量出发现、触发和送达分位数，并在积压演练中确认降级顺序。",
+          "follow_up": "agent 离线两分钟后补发样本，是否应触发过去的告警？",
+          "common_miss": "把 evaluation interval 当成完整告警延迟。",
+          "repair": "为一条样本填写六个阶段时间戳，找出最慢分位数。",
+          "sources": [
+            {
+              "source": "hi.breakdown.metrics-monitoring",
+              "heading": "2) How do we reduce alert latency below 1 minute?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "时间推理"
+            }
+          ]
+        },
+        {
+          "question": "监控系统在事故流量暴涨时如何保持可用？",
+          "trigger": "候选人只说多副本，没有工作负载优先级。",
+          "answer": "把 ingest、alert evaluation、dashboard 和 ad-hoc query 放入独立队列与资源池；按租户配额和重要级别限流。先保护 WAL 接收与关键 alert，重型历史查询排队、限制 fanout 或强制更粗 rollup。agent 本地有界缓冲并带 batch ID 重试，服务端多副本 owner/对象存储保证恢复；不可接收时明确返回 backpressure，不能 OOM。region 故障时 query 可 partial，alert ownership 安全接管。监控 oldest ingest、dropped samples、rule lag、query queue 与 recovery replay，恢复阶段也限速。还要预先定义各优先级的丢弃预算与恢复目标，并把实际缺口暴露给查询和事故复盘。",
+          "follow_up": "本地 agent buffer 满了，哪些样本可丢，怎样让用户知道？",
+          "common_miss": "所有请求同等优先，查询风暴把告警和写入挤死。",
+          "repair": "给四种 workload 排优先级，并写每种 overload 动作。",
+          "sources": [
+            {
+              "source": "hi.breakdown.metrics-monitoring",
+              "heading": "3) How do we ensure high availability during spikes and failures?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Handling Bursts with Queues and Load Shedding"
+            }
+          ]
+        },
+        {
+          "question": "某团队把 request_id 放进 label，系统如何在拖垮前阻止？",
+          "trigger": "候选人只在存储层扩容或事后清理。",
+          "answer": "接入层为 tenant、metric 和 label key 维护 active/new series 预算与近似计数，label allow/deny 规则在写入前执行。new-series rate 突升时拒绝新 series、删除明确非语义 label 或降采样，并返回可诊断错误；已有合法 series 继续写。后台 top-contributor 报告指出具体 metric/label/value 样本，预算在 CI 或配置发布前也可 lint。紧急变换必须记录规则版本，避免多个 request 被合并后告警含义悄然改变。监控 reject、series churn、compaction backlog 和恢复 ETA。",
+          "follow_up": "如何低成本估计每个 label key 的 distinct values？",
+          "common_miss": "依赖精确全量 COUNT DISTINCT，本身就成为高基数负担。",
+          "repair": "定义 tenant/metric/label 三层预算、告警与拒绝响应。",
+          "sources": [
+            {
+              "source": "hi.breakdown.metrics-monitoring",
+              "heading": "4) How do we handle cardinality explosion?"
+            },
+            {
+              "source": "hi.deep.data-structures-for-big-data",
+              "heading": "HyperLogLog"
+            }
+          ]
+        },
+        {
+          "question": "两个 evaluator 副本同时运行，怎样避免重复告警？",
+          "trigger": "候选人认为多副本天然提高可用性而无副作用。",
+          "answer": "按 rule group 分区并用带 epoch 的 owner lease，只有当前 owner 推进 pending/firing 状态；旧 owner 的 state commit 被 fencing。即使 failover 短暂双执行，notification event 使用稳定 alert fingerprint、state transition version 和 time bucket，sink 做幂等 upsert；provider retry 也复用同一 key。状态 checkpoint 保存 last evaluated watermark，接管者从该点继续而不是重放无限历史。silence 与 resolved 同样版本化。监控 ownership conflict、duplicate suppressed、evaluation gap 和 failover time，验证 HA 没有变成通知风暴。用旧 owner 暂停后复活的故障注入验证 fencing，并对供应商侧重复发送做周期性对账。",
+          "follow_up": "如果通知供应商不支持幂等 key，如何限制重复短信？",
+          "common_miss": "只在 evaluator 内存里记录已发送，重启即丢。",
+          "repair": "模拟 leader 暂停、lease 过期、新 leader 发送、旧 leader 恢复的时序。",
+          "sources": [
+            {
+              "source": "hi.breakdown.metrics-monitoring",
+              "heading": "Senior"
+            },
+            {
+              "source": "ddia.ch9",
+              "heading": "分布式锁和租约"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "ad-click-aggregator",
+      "title": "Ad Click Aggregator",
+      "source": "hi.breakdown.ad-click-aggregator",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "System Interface",
+          "Data Flow",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 server-side redirect、durable click log、impression identity、stream window aggregation、raw archive 与 advertiser query store 的广告点击白板。",
+        "acceptance": [
+          "redirect 延迟与点击记账解耦，日志不可用时的产品选择明确。",
+          "每个点击有 event_id、impression_id、event_time 和 ingestion metadata，重复与迟到可处理。",
+          "分钟聚合、raw event 和查询 projection 可对账并能重算。"
+        ],
+        "repair": "若设计在 redirect 请求里同步更新报表数据库，先拆成 redirect+durable append 与异步 aggregate/query 两条路径。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we scale to support 10k clicks per second?",
+          "2) How can we ensure that we don't lose any click data?",
+          "3) How can we prevent abuse from users clicking on ads multiple times?",
+          "4) How can we ensure that advertisers can query metrics at low latency?",
+          "Final Design",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.ad-click-aggregator",
+        "deliverable": "10k/s 容量表、durable append/ack、幂等聚合、impression abuse policy、late event 修正和分钟查询 runbook。",
+        "acceptance": [
+          "响应丢失、producer retry、consumer replay 均不会重复计入业务报表。",
+          "impression_id 限制同一曝光重复点击，但不把 NAT/IP 当用户身份。",
+          "查询低延迟来自预聚合和 partition pruning，且能从 raw events 重算校验。"
+        ],
+        "repair": "如果声称 exactly once，必须指出 producer ID、log offset/checkpoint、sink key/version 和 raw replay；缺任一项就改称至少一次加幂等效果。"
+      },
+      "concepts": [
+        {
+          "source": "hi.deep.kafka",
+          "heading": "Fault Tolerance and Durability",
+          "why": "让 redirect 后的点击事件经副本日志耐久保存并可重放。"
+        },
+        {
+          "source": "hi.deep.flink",
+          "heading": "Watermarks",
+          "why": "按 event time 处理移动网络造成的迟到点击。"
+        },
+        {
+          "source": "hi.deep.flink",
+          "heading": "Windows",
+          "why": "维护广告主分钟聚合及允许迟到窗口。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Batching and Hierarchical Aggregation",
+          "why": "把高频 click 先局部聚合，再写查询存储。"
+        },
+        {
+          "source": "hi.deep.time-series-databases",
+          "heading": "Time-Based Partitioning (Sharding by Time)",
+          "why": "按广告主和时间范围裁剪报表查询。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch12",
+          "heading": "时间推理",
+          "why": "区分点击发生时间、服务接收时间和窗口关闭时间。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "容错",
+          "why": "分析 checkpoint、重复消费和外部 sink 的一致性。"
+        },
+        {
+          "source": "ddia.ch11",
+          "heading": "批处理用例",
+          "why": "用离线重算对账流式分钟报表。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "先完成跳转，再异步形成报表",
+          "body": "点击入口验证 ad/campaign 状态，生成或接收 impression_id 和 click event_id，将事件耐久追加到多副本日志后返回 302。不能在用户跳转热路径同步更新聚合数据库，否则查询存储抖动会直接增加广告落地延迟。若日志短暂不可用，产品必须选择 fail-closed 保住计费完整性，或有限本地 spool 后 fail-open 并标记风险，不能静默丢数。redirect p99、append latency、spool bytes 和 lost-risk counter 分开监控。目标页面 URL 也要防开放重定向和篡改。容量测试要分别压测正常追加、日志降副本和本地缓冲耗尽，确认用户体验与可计费数据损失都符合已声明边界。",
+          "takeaway": "热路径只做验证与耐久记账，报表计算从日志异步派生。"
+        },
+        {
+          "title": "事件身份定义一次业务计数",
+          "body": "click event 至少包含 event_id、impression_id、ad_id、campaign_id、event_time、received_at、device/session 风险信号和 schema version。producer retry 必须复用 event_id；stream job 按 event_id 去重，聚合 sink 以 campaign+minute+window_version 幂等 upsert。impression_id 由广告展示服务签名生成，绑定广告、时间与可用上下文，点击入口校验后再记账。相同用户可能合法多次曝光，所以不能仅按 user/IP 永久去重；业务规则应表达每个 impression 是否最多计一次以及允许窗口。去重状态的保留期必须覆盖生产者重试和日志回放，否则超期重放仍会悄悄形成第二次计费。保留期变更也要先检查最长审计回放范围。",
+          "takeaway": "业务一次性来自 event/impression 身份和规则，不来自传输恰好一次。"
+        },
+        {
+          "title": "窗口必须声明 event time 与迟到策略",
+          "body": "广告主按一分钟查看点击，窗口应以 click event_time 分桶，而不是 worker 收到时间，否则网络延迟会把事件放错分钟。watermark 表示系统认为大部分事件已经到达，窗口先输出 provisional 结果；在 allowed lateness 内到达的事件生成修正 version，超过窗口可进入 late side output 和离线重算。API 可返回 data_through 和 finalized 标记，让广告主知道最近分钟仍会变化。监控 event-time lag、late ratio、watermark idle partition 和 correction volume，避免为了低延迟过早关闭窗口。结算截止点之后的超晚事件应生成可追踪 adjustment，而非改写已经出具的历史账单。",
+          "takeaway": "窗口结果是否最终，是对迟到数据的产品契约。"
+        },
+        {
+          "title": "流式容错要延伸到查询 sink",
+          "body": "Kafka 副本只保证事件日志耐久，Flink checkpoint 只保存算子状态和 source offset；若 sink 在 checkpoint 前后重复提交，报表仍可能双计。聚合结果应写稳定主键和单调 window_version，条件 upsert 拒绝旧版本；或使用 sink 支持的事务提交协议。raw events 保留到足以重算，batch job 定期按 campaign/minute 重聚合并与流结果比较。checkpoint age、recovery time、duplicate events、sink version conflict 和 reconciliation drift 是必须指标。恢复演练要在 sink 提交前后分别终止作业，检查同一窗口最终只保留一个可解释版本且能够从原始事件复算。差异超过阈值必须阻断结算。",
+          "takeaway": "端到端正确性包括 source、state、sink 和重算，不止消息队列。"
+        },
+        {
+          "title": "防刷以 Impression 为起点",
+          "body": "仅按 IP 或 user_id 去重会误伤共享网络，也容易被攻击者绕过。展示广告时生成签名 impression_id，记录 ad/campaign、placement、粗粒度主体和过期时间；点击必须携带有效 impression，规则可规定每 impression 只计一次，但仍保留全部原始事件用于风控。设备、速度、重复模式和异常来源进入风险评分，可把可疑点击标为 billable=false，而不是删除证据。策略版本写进事件，广告主报表区分 raw、valid 和 adjusted，支持申诉与重算。规则上线先做影子评估，比较误杀、漏判和收入影响，再按广告主或流量比例逐步启用并保留回滚版本。",
+          "takeaway": "去重与反欺诈是可审计策略判断，不是粗暴丢弃相同 IP。"
+        },
+        {
+          "title": "查询低延迟来自预聚合与分区",
+          "body": "广告主通常按 campaign/ad 和时间范围查询分钟序列，写入时就维护 campaign_id+day/time bucket 分区和 1m aggregates；长范围可进一步 rollup 到小时/天。查询服务做 partition pruning、批量读取和有限 cache，不扫描 raw click。最近窗口返回 provisional/version，历史 finalized 可长缓存。raw archive 存对象存储供重算和审计，不走交互查询。租户配额限制超大范围和高并发，指标观察 scanned partitions、rows、cache hit、freshness 和 correction rate。查询响应还应暴露口径版本与调整状态，使广告主能把页面数字和下载账目定位到同一份投影。",
+          "takeaway": "为真实报表访问模式建立可重算聚合，而不是把原始事件当查询表。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "10k clicks/s 为什么不需要每次直接写分析数据库？",
+          "trigger": "候选人同步 insert 并聚合，放大 redirect 延迟。",
+          "answer": "redirect 热路径只需验证并把事件耐久 append 到分区日志，批量 producer 可轻松摊薄网络和副本成本；stream consumers 按 campaign/ad 分区聚合，周期性或达到阈值后批量 upsert 分钟结果。分析数据库因此承受 aggregates 而非所有点击的随机写，查询也不与入口争资源。先算 10k/s×event bytes、partition 吞吐、保留和峰值，再选择分区数。若 consumer 落后，redirect 仍可继续到日志容量上限，并以 lag 报警，而不是让报表存储故障阻断用户跳转。",
+          "follow_up": "单个超大 campaign 成为分区热点时怎样拆分且保持聚合正确？",
+          "common_miss": "看到 10k/s 就分库，却没有批量和派生视图。",
+          "repair": "画 append、local aggregate、global merge、query store 四级写路径。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ad-click-aggregator",
+              "heading": "1) How can we scale to support 10k clicks per second?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Batching and Hierarchical Aggregation"
+            }
+          ]
+        },
+        {
+          "question": "如何保证不丢点击，又不虚假承诺 exactly once？",
+          "trigger": "候选人说 Kafka exactly once 就结束。",
+          "answer": "入口在返回 redirect 前等待多副本日志确认，producer retry 复用 event_id；若 append 结果未知则重试同一事件。consumer 至少一次处理，按 event_id 去重，checkpoint 保存 offset 与窗口 state。sink 用 campaign+minute+window_version 条件 upsert，重复 checkpoint 不双计。raw log/archive 保留并定期 batch 重算，对比流聚合发现 drift。若日志完全不可用，产品明确 fail-closed 或本地有界 spool 的风险。这样每个故障点都有恢复与证据，而不是依赖单个组件口号。",
+          "follow_up": "日志确认成功但 302 响应丢失，浏览器重试会发生什么？",
+          "common_miss": "忽略 producer 和 sink 的重复，只看 consumer。",
+          "repair": "为 producer、log、state、sink、reconcile 五层写唯一 ID 和 checkpoint。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ad-click-aggregator",
+              "heading": "2) How can we ensure that we don't lose any click data?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "容错"
+            }
+          ]
+        },
+        {
+          "question": "如何阻止同一用户反复点击广告刷量而不误伤共享 IP？",
+          "trigger": "候选人按 IP 永久去重。",
+          "answer": "广告展示时生成签名 impression_id，绑定 ad/campaign、placement、时间窗口和必要上下文；点击入口验证签名和过期，每 impression 按规则最多计一次 billable click。所有重复原始点击仍写日志，标记 dedupe/risk reason，便于风控和申诉。IP、device、velocity、referrer 只作为风险特征，不作为唯一身份；策略版本进入事件，后续调整可重算 valid/billable projection。匿名场景也能限制单 impression，而共享网络中的不同 impression 不会被合并。",
+          "follow_up": "攻击者伪造大量 impression 再点击时，信任边界在哪里？",
+          "common_miss": "删除可疑事件导致无法审计，或将 NAT 用户视为同一人。",
+          "repair": "区分 raw click、valid impression、deduped click、billable click 四层。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ad-click-aggregator",
+              "heading": "3) How can we prevent abuse from users clicking on ads multiple times?"
+            }
+          ]
+        },
+        {
+          "question": "广告主查询一个月分钟数据，怎样保证低延迟和可修正？",
+          "trigger": "候选人从 raw clicks 做 GROUP BY。",
+          "answer": "流处理预先按 advertiser/campaign/ad+minute 聚合，查询存储按 tenant 和时间分区；一个月范围可读取分钟或根据图表分辨率选择小时 rollup。最近窗口带 provisional、data_through 和 version，迟到事件在允许窗口内写更高 version；历史 finalized 结果可长缓存。查询做 partition pruning、范围上限和租户配额，raw archive 只供重算审计。若重算发现差异，以新 projection version 发布并记录 adjustment，不能静默覆盖计费账目。监控 scanned rows、p95、freshness 和 correction。",
+          "follow_up": "计费已结算后又发现迟到点击，如何处理账务调整？",
+          "common_miss": "预聚合后认为结果永远不变，没有版本或迟到契约。",
+          "repair": "设计 minute aggregate 的主键、version、finalized_at 与 correction API。",
+          "sources": [
+            {
+              "source": "hi.breakdown.ad-click-aggregator",
+              "heading": "4) How can we ensure that advertisers can query metrics at low latency?"
+            },
+            {
+              "source": "hi.deep.time-series-databases",
+              "heading": "Downsampling and Rollups"
+            }
+          ]
+        },
+        {
+          "question": "event time 窗口何时关闭，迟到点击算到哪里？",
+          "trigger": "候选人只按服务器接收时间分桶。",
+          "answer": "事件按客户端/边缘记录的 click event_time 分桶，但先校验合理偏差并保留 received_at；watermark 由各 partition 已观察进度和允许乱序生成。窗口在 watermark 越过 end 后先输出，allowed lateness 内到达的事件更新同一分钟并递增 version，超过后进入 late side output，由离线重算或账务调整处理。空闲 partition 要标记 idle，避免 watermark 永久卡住。API 公开最近数据尚未 finalized 的状态。延迟与正确性取舍通过 late ratio、correction volume 和业务结算期限调节。",
+          "follow_up": "恶意客户端伪造未来 event_time 会怎样影响 watermark？",
+          "common_miss": "忽略事件时间不可信和 idle partition。",
+          "repair": "画 on-time、允许迟到、超晚三条事件路径及输出版本。",
+          "sources": [
+            {
+              "source": "hi.deep.flink",
+              "heading": "Watermarks"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "时间推理"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "top-k",
+      "title": "YouTube Top K",
+      "source": "hi.breakdown.top-k",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 view event、分层计数、窗口语义、Top K materialization、cache/query 与 exact/approximate 选择的 YouTube Top K 白板。",
+        "acceptance": [
+          "all-time、tumbling hour/day/month 和 sliding window 的边界与更新方式分别明确。",
+          "高频 views 不逐次写单一 video counter，而有局部聚合、分区和全局 merge。",
+          "近似算法给出误差、内存和产品适用范围，不冒充精确榜单。"
+        ],
+        "repair": "若只说 Redis Sorted Set，先算 view write QPS、窗口数与单 key 热点，再画 raw log、partial counts、merge 和 materialized ranking。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we cut down on the number of queries to the database?",
+          "2) How can we handle the massive number of writes to the database?",
+          "3) How do we optimize our top K queries?",
+          "4) What if we need to support sliding windows?",
+          "5) Can we make use of approximations to improve performance?",
+          "6) Is there room for a specialized database here?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.top-k",
+        "deliverable": "cache/precompute、分层聚合、窗口 bucket、Count-Min/候选精排、滑窗过期和专用 OLAP 选型矩阵。",
+        "acceptance": [
+          "Top K 查询读取已物化有序结果，不为每个请求扫描全部视频。",
+          "sliding window 能减去过期 bucket 或使用支持窗口的状态，而非无限累计。",
+          "approximate candidate generation 后有 exact refine 或明确误差，能说明错误方向。"
+        ],
+        "repair": "若回答“用 Flink”就结束，补 event partition、state key、window、watermark、checkpoint、sink key 和 query materialization 六项。"
+      },
+      "concepts": [
+        {
+          "source": "hi.deep.data-structures-for-big-data",
+          "heading": "Count-Min Sketch",
+          "why": "用有界内存估计频率，并理解只会高估的误差。"
+        },
+        {
+          "source": "hi.deep.flink",
+          "heading": "Windows",
+          "why": "实现 tumbling/sliding 时间窗口与过期。"
+        },
+        {
+          "source": "hi.deep.flink",
+          "heading": "State Management",
+          "why": "持久化 video/window 聚合并从 checkpoint 恢复。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Batching and Hierarchical Aggregation",
+          "why": "从本地 partial count 合并为全局排名，降低热点写。"
+        },
+        {
+          "source": "hi.deep.time-series-databases",
+          "heading": "Downsampling and Rollups",
+          "why": "按时间桶保留可组合计数，服务不同窗口。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch12",
+          "heading": "流处理",
+          "why": "把持续 view events 转换为窗口化派生排名。"
+        },
+        {
+          "source": "ddia.ch11",
+          "heading": "数据流引擎",
+          "why": "理解分区 partial aggregate、shuffle 与全局 merge。"
+        },
+        {
+          "source": "ddia.ch4",
+          "heading": "物化视图与多维数据集",
+          "why": "把常用时间窗口的 Top K 预先维护为查询视图。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "先定义榜单窗口和精确性",
+          "body": "Top K 不是单一需求。all-time 只累加，小时/日/月 tumbling window 在固定边界归零，sliding 24h 则每时刻都要减去过期事件；全球榜单、地区榜单和类别榜单还会倍增状态。产品需说明 view 去重、event time、更新频率、K 上限和允许误差。精确账目可能要求 raw event 可重算，推荐榜单则可接受近似。只有先写清这些语义，才能判断用普通计数、时间 bucket、stream state、Redis ZSET、OLAP 还是 sketch。还要定义并列排名、删除视频和隐私下架的处理，否则相同计数与撤回事件会让各客户端看到不同榜单。",
+          "takeaway": "窗口、维度、更新频率和误差预算共同定义 Top K 问题。"
+        },
+        {
+          "title": "高频写入采用局部聚合与分层合并",
+          "body": "每个 view 直接更新 video 全局计数会形成热门视频单 key 热点。入口把事件耐久写日志，consumer 按 video_id 分区；每个 partition 在短窗口本地累加，再批量写 partial counts。第二层按时间和维度 merge partial，维护候选 Top M 和最终 Top K。热门 key 可加随机 salt 做多 shard counter，读取时合并；event_id 或业务去重规则防重放双计。checkpoint 与幂等 sink 让恢复安全，raw log/archive 支持离线对账。指标看 ingest lag、hot key、merge age 和 drift。压测应包含单视频突发和分区扩缩容，确认 salted partial 在重放与迁移后仍只被合并一次。合并结果需记录输入版本。",
+          "takeaway": "把逐事件随机写变成可重放日志和层级批量聚合。"
+        },
+        {
+          "title": "查询应读取物化排名而非扫描",
+          "body": "每个常用 window/dimension 周期性生成有序 Top K snapshot，主键包含 window_type、window_start、dimension、generation；API 读取一条小结果并缓存。更新可用 copy-on-write 写新 generation 后原子切换，避免用户读到半个榜单。最近窗口带 data_through 和 provisional，历史完成窗口长缓存。若请求 K 小于存储 Top M 直接截断；临时维度或超长范围走受限 OLAP job，而不是拖垮在线库。监控 materialization lag、cache hit、snapshot size 和 query fallback。生成失败时继续服务上一代并标出陈旧时间，成功切换后异步回收旧代，避免空榜或缓存读到不存在的对象。",
+          "takeaway": "预计算把昂贵全局排序移出请求路径，并用 generation 保证一致快照。"
+        },
+        {
+          "title": "Sliding window 需要显式减去过去",
+          "body": "精确滑窗可把时间分成分钟或小时 buckets，保存每 video 每 bucket count；当前 24h 结果是最近 buckets 的和，窗口推进时减去最老 bucket。bucket 越细误差越小但状态越大，越粗则边界近似更明显。stream engine 可用 keyed state 和 timers 管理过期，checkpoint 恢复；迟到事件更新仍在保留的 bucket，并触发新 generation。不能只在 all-time counter 上加数据后声称支持滑窗。状态 TTL、watermark、late policy 和重算都要明确。用窗口边界前后的一组事件手算增减，并验证重启后 timer 不会重复扣除或遗忘旧 bucket。对账还要覆盖跨日时区边界。",
+          "takeaway": "滑窗的核心是可定位、可删除的时间贡献。"
+        },
+        {
+          "title": "近似结构用于候选，不替代产品判断",
+          "body": "Count-Min Sketch 用固定内存估计频率且只会高估，适合在巨大 key 空间中筛出可能热门的视频；配合小型 heap 保存候选，再从精确 partial counts 对候选重算 Top K，可大幅降低全量排序成本。误差由宽度、深度和总计数决定，碰撞可能让某视频虚高。若产品允许近似趋势榜，可直接标注 freshness/approximate；若涉及奖金或结算，必须精确。滚动窗口需要每 bucket sketch 或可衰减结构，不能从单个 sketch 删除任意旧事件。上线参数要用真实长尾分布回放，测候选召回率、排名偏差与内存，并在流量增长后重新校准。",
+          "takeaway": "sketch 缩小候选集合，最终是否精排取决于业务误差预算。"
+        },
+        {
+          "title": "专用数据库要由查询与运维触发",
+          "body": "Redis ZSET 适合小规模实时有序集合，但热门写、持久恢复、多窗口和跨维度会迅速增成本；TimescaleDB 适合时间 bucket 与连续聚合，Druid/Pinot/ClickHouse 适合高吞吐事件和多维 OLAP，Flink 擅长持续窗口状态。选型应比较 ingest、window、dimension、exactness、query p95、retention、rebuild 和团队运维，而不是列工具清单。简单阶段可用日志+批处理+数据库 materialized table，只有容量和延迟证据触顶才引入专用引擎。评审时必须演示从原始事件重建榜单的时长与步骤，因为恢复成本常比稳态查询延迟更能决定方案。",
+          "takeaway": "技术选择服务已定义的窗口与查询，不反过来塑造模糊需求。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "怎样减少 Top K 查询次数和数据库扫描？",
+          "trigger": "候选人每次请求 GROUP BY/ORDER BY 全量数据。",
+          "answer": "对固定 window/dimension 周期性物化 Top M snapshot，写入带 generation 的小表或对象并在区域缓存；请求只读取对应 snapshot、截取 K。新 generation 完整写好后原子切换，避免半更新。最近窗口按秒/分钟刷新并标 provisional，历史完成窗口长缓存。cache miss 用 singleflight 回源，不触发临时全量计算；不常见维度进入有配额的 OLAP job。监控 materialization lag、snapshot build time、cache hit 和 fallback，确保查询低延迟来自准备好的数据而非隐藏昂贵工作。",
+          "follow_up": "榜单更新时如何让全球 cache 同时看到同一 generation？",
+          "common_miss": "只缓存昂贵查询，却仍在每次过期时扫描全库。",
+          "repair": "设计 snapshot key、generation pointer、TTL 和原子发布步骤。",
+          "sources": [
+            {
+              "source": "hi.breakdown.top-k",
+              "heading": "1) How can we cut down on the number of queries to the database?"
+            },
+            {
+              "source": "ddia.ch4",
+              "heading": "物化视图与多维数据集"
+            }
+          ]
+        },
+        {
+          "question": "热门视频的每次播放都更新一个 counter，会发生什么？",
+          "trigger": "候选人没有 hot key 或写放大分析。",
+          "answer": "单 counter 会受一个 partition、锁或网络 owner 限制，重试还可能双计。view events 先进入按 video hash 分区日志，consumer 本地累加并批量写 partial；超热点 video 可按 salt 拆多个 counter，下一层周期 merge。去重依据 event_id 或明确 view 规则，sink 用 bucket+video+partition/version 幂等。写延迟与榜单 freshness 解耦，lag 超标再扩 consumer 或缩短 batch。raw events 保留以对账。监控 top-key rate、partition skew、batch size、merge age 和 duplicate ratio。扩分区时以 epoch 隔离旧新 partial，并通过故障回放确认同一批次不会在两个 owner 上被重复合并。",
+          "follow_up": "salt 数量变化时如何迁移而不重复或漏计？",
+          "common_miss": "只加数据库 shard，却仍让一个 video 落在一个 shard。",
+          "repair": "画 event log、salted partial、global merge、snapshot 四层。",
+          "sources": [
+            {
+              "source": "hi.breakdown.top-k",
+              "heading": "2) How can we handle the massive number of writes to the database?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Batching and Hierarchical Aggregation"
+            }
+          ]
+        },
+        {
+          "question": "精确 sliding 24h Top K 如何在窗口推进时删除旧贡献？",
+          "trigger": "候选人只有 all-time counter 或 tumbling day。",
+          "answer": "把 event time 切成固定小 bucket，例如一分钟，保存 video/bucket count；当前 24h count 是最近 1440 个 buckets 的和。stream state 在新 bucket 到来时加贡献，在 timer 到期时减最老 bucket，并更新候选 ranking；checkpoint 保存 state/timer。bucket 越粗边界误差越大，越细状态与写入越多。迟到事件若 bucket 仍在保留期内就修正并发布新 generation，超晚进入重算。也可由 OLAP 按时间过滤查询，但在线 p95 与成本要证明可接受。",
+          "follow_up": "不能为每个 video 保存 1440 个 bucket 时，怎样压缩状态？",
+          "common_miss": "把 tumbling 24h 误称为任意时刻 sliding 24h。",
+          "repair": "用 4 个小时 bucket 手算窗口前进和过期减法。",
+          "sources": [
+            {
+              "source": "hi.breakdown.top-k",
+              "heading": "4) What if we need to support sliding windows?"
+            },
+            {
+              "source": "hi.deep.flink",
+              "heading": "Windows"
+            }
+          ]
+        },
+        {
+          "question": "Count-Min Sketch 会把冷门视频误判成热门，为什么还能用？",
+          "trigger": "候选人说近似但没有误差方向和 refine。",
+          "answer": "Count-Min Sketch 因 hash 碰撞只高估频率，宽度/深度决定误差概率。它适合从巨大 key 空间持续筛出候选 Top M，而不是直接决定高风险精确榜单；候选进入小 heap 后，再从精确 partial counts 读取并重排 Top K，可消除大部分碰撞误判。趋势推荐若接受近似，可公开 freshness/误差预算；结算、奖励不能直接使用。滑窗需要每时间 bucket sketch 或衰减方案，因为普通 sketch 不能删除单个旧贡献。监控候选召回与 exact sample error 验证参数。",
+          "follow_up": "Sketch 参数如何随总事件数增长调整并平滑升级？",
+          "common_miss": "只说省内存，不说明 false positive/high estimate 和业务影响。",
+          "repair": "写 candidate generation → exact refine 两阶段，并标可接受误差。",
+          "sources": [
+            {
+              "source": "hi.breakdown.top-k",
+              "heading": "5) Can we make use of approximations to improve performance?"
+            },
+            {
+              "source": "hi.deep.data-structures-for-big-data",
+              "heading": "Top K"
+            }
+          ]
+        },
+        {
+          "question": "何时选择 Redis、Flink、TimescaleDB 或实时 OLAP？",
+          "trigger": "候选人罗列产品，不把能力映射到需求。",
+          "answer": "先用访问模式决策：Redis ZSET 适合有限维度、小状态、低延迟排名，但多窗口持久重建和热点写成本高；Flink 适合持续 event-time 窗口与 checkpoint state，仍需要外部 query sink；TimescaleDB 适合时间 bucket、连续聚合和 SQL 范围查询；Druid/Pinot/ClickHouse 适合高吞吐、多维过滤和大范围 OLAP。若初始 QPS 可由日志+批处理+关系表满足，应选更简单基线。比较 ingest、窗口、exactness、p95、retention、rebuild、成本和团队能力后再选，而不是默认组合全部。",
+          "follow_up": "Flink state 已算好 Top K，为什么还需要查询存储？",
+          "common_miss": "工具驱动设计，忽略 source of truth、恢复与运营。",
+          "repair": "为四种技术填 capability/cost/failure/rebuild 四列表。",
+          "sources": [
+            {
+              "source": "hi.breakdown.top-k",
+              "heading": "6) Is there room for a specialized database here?"
+            },
+            {
+              "source": "hi.deep.time-series-databases",
+              "heading": "Putting It Together: A Time-Series Storage Engine"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

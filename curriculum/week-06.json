@@ -1,0 +1,979 @@
+{
+  "schema_version": "2.0",
+  "week": 6,
+  "theme": "高争用交易、租约与资金正确性",
+  "algorithm_block": "linked-list",
+  "projects": [
+    {
+      "slug": "ticketmaster",
+      "title": "Ticketmaster",
+      "complete_read_day": 1,
+      "deep_dive_day": 2
+    },
+    {
+      "slug": "online-auction",
+      "title": "Online Auction",
+      "complete_read_day": 3,
+      "deep_dive_day": 4
+    },
+    {
+      "slug": "payment-system",
+      "title": "Payment System",
+      "complete_read_day": 5,
+      "deep_dive_day": 6
+    }
+  ],
+  "audio_preview": {
+    "title": "第 6 周导览：把不可逆承诺放在最小边界",
+    "script": "Ticketmaster、Online Auction 和 Payment System 都有高并发写入，但正确性承诺不同。票务不能把同一座位卖两次，拍卖不能在截止后接受出价且必须选出唯一赢家，支付不能重复扣款并要留下平衡、可审计的账本。通读日先为每题写状态机：座位从可售到保留再到已售；拍卖从开放到关闭，出价按单调序列推进；支付意图经过处理中到最终状态，外部网络超时只代表结果未知。然后把条件写、版本、幂等键和对账放到具体提交点，不要笼统说“强一致数据库”。深挖日会遇到热门开售、单场拍卖热键、重复支付回调和 webhook 乱序。你需要缩小强协调域：只锁一个 seat、一个 auction 或一个 payment intent，其余搜索、座位图、实时推送和通知都可以异步派生。故障恢复必须覆盖租约过期后的旧持有者、外部成功但本地响应丢失、死信重放与事实对账。mock 的评分重点不是组件数量，而是是否给出诚实状态、是否阻止重复副作用、是否能证明恢复后没有静默差异。完成本周后，你应能用业务不变量决定事务边界，用等待室、背压和队列保护热点，并用超卖数、截止后出价、重复扣款和账本不平衡这些直接指标守住系统。使用时先暂停音频，凭记忆画出事实状态、提交点和故障分支，再继续核对。每天结束前必须留下可复查的图、容量计算和一条 repair 记录；如果答案只能说出组件名，就回到原文对应标题，把请求时序与用户可见结果补全。周末的综合 mock 不追求背诵固定架构，而要在约束变化后仍能守住不变量、说明取舍，并用指标决定降级、扩展和回滚。",
+    "provider": "ElevenLabs",
+    "voice": "Siqi Liu - Calm, Warm and Gentle",
+    "model": "Eleven v3",
+    "auto_generate": false
+  },
+  "days": [
+    {
+      "week": 6,
+      "day": 1,
+      "kind": "project-read",
+      "title": "Ticketmaster · 完整通读",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "问题框定",
+          "instruction": "先写 FR/NFR、容量假设和不做什么；暂不画扩展组件。",
+          "minutes": 30
+        },
+        {
+          "title": "连续完整通读",
+          "instruction": "从 Understanding/Understand the Problem 按原文顺序读到 High-Level Design：Ticketmaster。",
+          "minutes": 80
+        },
+        {
+          "title": "关页重建",
+          "instruction": "不看答案重画 API、数据模型、读写路径和权威状态。",
+          "minutes": 30
+        },
+        {
+          "title": "验收与修复",
+          "instruction": "逐条核对验收标准；不通过就执行当天 repair，不用补读掩盖。",
+          "minutes": 20
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "Understanding the Problem",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#understanding-the-problem"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "Non-Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#non-functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "The Set Up",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#the-set-up"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "Planning the Approach",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#planning-the-approach"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "Defining the Core Entities",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#defining-the-core-entities"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "API or System Interface",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#api-or-system-interface"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "High-Level Design",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#high-level-design"
+        }
+      ],
+      "artifact": "完成一张 Ticketmaster 端到端设计图：标出 座位可售、保留、已售与过期租约、同步提交边界、主要读写路径、分片键与用户可见状态。",
+      "acceptance": [
+        "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+        "设计图能逐步解释 用户选择座位后如何保留、支付并最终出票 与 千万并发查看活动、搜索与座位可用性，每条箭头标明协议或数据。",
+        "明确 带 seatVersion 的条件写从 AVAILABLE 变为 HELD，支付确认后再从同一 hold 变为 SOLD，并区分事实源、缓存、索引、队列和客户端视图。",
+        "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+      ],
+      "repair": "若讲解出现组件跳跃，回到 座位可售、保留、已售与过期租约，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。",
+      "algorithms": {
+        "tag": "Linked List",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Reverse Linked List",
+            "slug": "reverse-linked-list",
+            "url": "https://leetcode.com/problems/reverse-linked-list/"
+          },
+          {
+            "title": "Merge Two Sorted Lists",
+            "slug": "merge-two-sorted-lists",
+            "url": "https://leetcode.com/problems/merge-two-sorted-lists/"
+          },
+          {
+            "title": "Reorder List",
+            "slug": "reorder-list",
+            "url": "https://leetcode.com/problems/reorder-list/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 6,
+      "day": 2,
+      "kind": "project-deep",
+      "title": "Ticketmaster · Deep Dive 与 Senior 修复",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "Deep Dives",
+          "instruction": "围绕 Ticketmaster 逐个回答机制、规模阈值和失败语义。",
+          "minutes": 50
+        },
+        {
+          "title": "精确补课",
+          "instruction": "只读今天列出的 Core / Technology / Pattern / DDIA 小节。",
+          "minutes": 30
+        },
+        {
+          "title": "Senior/Staff 追问",
+          "instruction": "先口述回答，再对照详细答案；为每个追问写证据。",
+          "minutes": 40
+        },
+        {
+          "title": "故障注入与修复",
+          "instruction": "把超时、重复、乱序、热点或部分失败注入白板后重答。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "Potential Deep Dives",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#potential-deep-dives"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "1) How do we improve the booking experience by reserving tickets?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#1-how-do-we-improve-the-booking-experience-by-reserving-tickets"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "2) How is the view API going to scale to support 10s of millions of concurrent requests during popular events?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#2-how-is-the-view-api-going-to-scale-to-support-10s-of-millions-of-concurrent-requests-during-popular-events"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "3) How will the system ensure a good user experience during high-demand events with millions simultaneously booking tickets?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#3-how-will-the-system-ensure-a-good-user-experience-during-high-demand-events-with-millions-simultaneously-booking-tickets"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "4) How can you improve search to ensure we meet our low latency requirements?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#4-how-can-you-improve-search-to-ensure-we-meet-our-low-latency-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "5) How can you speed up frequently repeated search queries and reduce load on our search infrastructure?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#5-how-can-you-speed-up-frequently-repeated-search-queries-and-reduce-load-on-our-search-infrastructure"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "What is Expected at Each Level?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#what-is-expected-at-each-level"
+        },
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "Senior",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#senior"
+        },
+        {
+          "source_id": "hi.pattern.dealing-with-contention",
+          "page_title": "Dealing with Contention",
+          "heading": "Optimistic Concurrency Control",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/dealing-with-contention#optimistic-concurrency-control"
+        },
+        {
+          "source_id": "hi.pattern.scaling-reads",
+          "page_title": "Scaling Reads",
+          "heading": "Add External Caching Layers",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/scaling-reads#add-external-caching-layers"
+        },
+        {
+          "source_id": "hi.core.data-modeling",
+          "page_title": "Data Modeling",
+          "heading": "Indexing for Access Patterns",
+          "url": "https://www.hellointerview.com/learn/system-design/core-concepts/data-modeling#indexing-for-access-patterns"
+        },
+        {
+          "source_id": "hi.deep.elasticsearch",
+          "page_title": "Elasticsearch",
+          "heading": "Pagination and Cursors",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/elasticsearch#pagination-and-cursors"
+        },
+        {
+          "source_id": "ddia.ch8",
+          "page_title": "8 事务",
+          "heading": "可串行化",
+          "url": "https://ddia.vonng.com/ch8/#sec_transactions_serializability"
+        },
+        {
+          "source_id": "ddia.ch9",
+          "page_title": "9 分布式系统的麻烦",
+          "heading": "分布式锁和租约",
+          "url": "https://ddia.vonng.com/ch9/#sec_distributed_lock_fencing"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "幂等性",
+          "url": "https://ddia.vonng.com/ch12/#sec_stream_idempotence"
+        }
+      ],
+      "artifact": "提交 Ticketmaster 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+      "acceptance": [
+        "逐项覆盖 Potential Deep Dives 中列出的 5 个问题，并能说明方案代价。",
+        "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+        "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+        "mock 后记录 critical miss、修复动作和同题复测证据。"
+      ],
+      "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。",
+      "algorithms": {
+        "tag": "Linked List",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Remove Nth Node From End of List",
+            "slug": "remove-nth-node-from-end-of-list",
+            "url": "https://leetcode.com/problems/remove-nth-node-from-end-of-list/"
+          },
+          {
+            "title": "Copy List with Random Pointer",
+            "slug": "copy-list-with-random-pointer",
+            "url": "https://leetcode.com/problems/copy-list-with-random-pointer/"
+          },
+          {
+            "title": "Add Two Numbers",
+            "slug": "add-two-numbers",
+            "url": "https://leetcode.com/problems/add-two-numbers/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 6,
+      "day": 3,
+      "kind": "project-read",
+      "title": "Online Auction · 完整通读",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "问题框定",
+          "instruction": "先写 FR/NFR、容量假设和不做什么；暂不画扩展组件。",
+          "minutes": 30
+        },
+        {
+          "title": "连续完整通读",
+          "instruction": "从 Understanding/Understand the Problem 按原文顺序读到 High-Level Design：Online Auction。",
+          "minutes": 80
+        },
+        {
+          "title": "关页重建",
+          "instruction": "不看答案重画 API、数据模型、读写路径和权威状态。",
+          "minutes": 30
+        },
+        {
+          "title": "验收与修复",
+          "instruction": "逐条核对验收标准；不通过就执行当天 repair，不用补读掩盖。",
+          "minutes": 20
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "Understanding the Problem",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#understanding-the-problem"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "Non-Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#non-functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "The Set Up",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#the-set-up"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "Defining the Core Entities",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#defining-the-core-entities"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "API or System Interface",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#api-or-system-interface"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "High-Level Design",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#high-level-design"
+        }
+      ],
+      "artifact": "完成一张 Online Auction 端到端设计图：标出 拍卖规则、出价日志、当前最高价与结束结果、同步提交边界、主要读写路径、分片键与用户可见状态。",
+      "acceptance": [
+        "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+        "设计图能逐步解释 新出价如何校验高于当前价并按唯一顺序接受 与 实时查看最高价并在结束时得到不可争议赢家，每条箭头标明协议或数据。",
+        "明确 单个 auctionId 的条件事务追加 bid 并更新 currentPrice/version，并区分事实源、缓存、索引、队列和客户端视图。",
+        "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+      ],
+      "repair": "若讲解出现组件跳跃，回到 拍卖规则、出价日志、当前最高价与结束结果，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。",
+      "algorithms": {
+        "tag": "Linked List",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Linked List Cycle",
+            "slug": "linked-list-cycle",
+            "url": "https://leetcode.com/problems/linked-list-cycle/"
+          },
+          {
+            "title": "Find the Duplicate Number",
+            "slug": "find-the-duplicate-number",
+            "url": "https://leetcode.com/problems/find-the-duplicate-number/"
+          },
+          {
+            "title": "LRU Cache",
+            "slug": "lru-cache",
+            "url": "https://leetcode.com/problems/lru-cache/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 6,
+      "day": 4,
+      "kind": "project-deep",
+      "title": "Online Auction · Deep Dive 与 Senior 修复",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "Deep Dives",
+          "instruction": "围绕 Online Auction 逐个回答机制、规模阈值和失败语义。",
+          "minutes": 50
+        },
+        {
+          "title": "精确补课",
+          "instruction": "只读今天列出的 Core / Technology / Pattern / DDIA 小节。",
+          "minutes": 30
+        },
+        {
+          "title": "Senior/Staff 追问",
+          "instruction": "先口述回答，再对照详细答案；为每个追问写证据。",
+          "minutes": 40
+        },
+        {
+          "title": "故障注入与修复",
+          "instruction": "把超时、重复、乱序、热点或部分失败注入白板后重答。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "Potential Deep Dives",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#potential-deep-dives"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "1) How can we ensure strong consistency for bids?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#1-how-can-we-ensure-strong-consistency-for-bids"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "2) How can we ensure that the system is fault tolerant and durable?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#2-how-can-we-ensure-that-the-system-is-fault-tolerant-and-durable"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "3) How can we ensure that the system displays the current highest bid in real-time?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#3-how-can-we-ensure-that-the-system-displays-the-current-highest-bid-in-real-time"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "4) How can we ensure that the system scales to support 10M concurrent auctions?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#4-how-can-we-ensure-that-the-system-scales-to-support-10m-concurrent-auctions"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "Some additional deep dives you might consider",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#some-additional-deep-dives-you-might-consider"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "What is Expected at Each Level?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#what-is-expected-at-each-level"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "Senior",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#senior"
+        },
+        {
+          "source_id": "hi.pattern.dealing-with-contention",
+          "page_title": "Dealing with Contention",
+          "heading": "Optimistic Concurrency Control",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/dealing-with-contention#optimistic-concurrency-control"
+        },
+        {
+          "source_id": "hi.pattern.realtime-updates",
+          "page_title": "Real-time Updates",
+          "heading": "Websockets: The Full-Duplex Champion",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/realtime-updates#websockets-the-full-duplex-champion"
+        },
+        {
+          "source_id": "hi.core.data-modeling",
+          "page_title": "Data Modeling",
+          "heading": "Entities, Keys & Relationships",
+          "url": "https://www.hellointerview.com/learn/system-design/core-concepts/data-modeling#entities-keys--relationships"
+        },
+        {
+          "source_id": "hi.deep.redis",
+          "page_title": "Redis",
+          "heading": "Redis for Pub/Sub",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/redis#redis-for-pubsub"
+        },
+        {
+          "source_id": "ddia.ch10",
+          "page_title": "10 一致性与共识",
+          "heading": "线性一致性",
+          "url": "https://ddia.vonng.com/ch10/#sec_consistency_linearizability"
+        },
+        {
+          "source_id": "ddia.ch8",
+          "page_title": "8 事务",
+          "heading": "可串行化",
+          "url": "https://ddia.vonng.com/ch8/#sec_transactions_serializability"
+        },
+        {
+          "source_id": "ddia.ch9",
+          "page_title": "9 分布式系统的麻烦",
+          "heading": "不可靠的时钟",
+          "url": "https://ddia.vonng.com/ch9/#sec_distributed_clocks"
+        }
+      ],
+      "artifact": "提交 Online Auction 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+      "acceptance": [
+        "逐项覆盖 Potential Deep Dives 中列出的 4 个问题，并能说明方案代价。",
+        "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+        "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+        "mock 后记录 critical miss、修复动作和同题复测证据。"
+      ],
+      "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。",
+      "algorithms": {
+        "tag": "Linked List",
+        "mode": "new",
+        "problems": [
+          {
+            "title": "Reverse Nodes in k-Group",
+            "slug": "reverse-nodes-in-k-group",
+            "url": "https://leetcode.com/problems/reverse-nodes-in-k-group/"
+          },
+          {
+            "title": "Swap Nodes in Pairs",
+            "slug": "swap-nodes-in-pairs",
+            "url": "https://leetcode.com/problems/swap-nodes-in-pairs/"
+          },
+          {
+            "title": "Merge k Sorted Lists",
+            "slug": "merge-k-sorted-lists",
+            "url": "https://leetcode.com/problems/merge-k-sorted-lists/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 6,
+      "day": 5,
+      "kind": "project-read",
+      "title": "Payment System · 完整通读",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "问题框定",
+          "instruction": "先写 FR/NFR、容量假设和不做什么；暂不画扩展组件。",
+          "minutes": 30
+        },
+        {
+          "title": "连续完整通读",
+          "instruction": "从 Understanding/Understand the Problem 按原文顺序读到 High-Level Design：Payment System。",
+          "minutes": 80
+        },
+        {
+          "title": "关页重建",
+          "instruction": "不看答案重画 API、数据模型、读写路径和权威状态。",
+          "minutes": 30
+        },
+        {
+          "title": "验收与修复",
+          "instruction": "逐条核对验收标准；不通过就执行当天 repair，不用补读掩盖。",
+          "minutes": 20
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "Understanding the Problem",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#understanding-the-problem"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "Non-Functional Requirements",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#non-functional-requirements"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "The Set Up",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#the-set-up"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "Defining the Core Entities",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#defining-the-core-entities"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "API or System Interface",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#api-or-system-interface"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "High-Level Design",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#high-level-design"
+        }
+      ],
+      "artifact": "完成一张 Payment System 端到端设计图：标出 支付意图、处理尝试、账本条目与外部网络状态、同步提交边界、主要读写路径、分片键与用户可见状态。",
+      "acceptance": [
+        "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+        "设计图能逐步解释 商户发起支付后如何安全调用外部网络并更新状态 与 商户查询状态并通过 webhook 获得可验证更新，每条箭头标明协议或数据。",
+        "明确 本地记录 payment intent 与幂等键后开始外部调用，最终状态由可对账事件条件推进，并区分事实源、缓存、索引、队列和客户端视图。",
+        "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+      ],
+      "repair": "若讲解出现组件跳跃，回到 支付意图、处理尝试、账本条目与外部网络状态，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。",
+      "algorithms": {
+        "tag": "Linked List",
+        "mode": "review",
+        "problems": [
+          {
+            "title": "Reverse Linked List",
+            "slug": "reverse-linked-list",
+            "url": "https://leetcode.com/problems/reverse-linked-list/"
+          },
+          {
+            "title": "Remove Nth Node From End of List",
+            "slug": "remove-nth-node-from-end-of-list",
+            "url": "https://leetcode.com/problems/remove-nth-node-from-end-of-list/"
+          },
+          {
+            "title": "Linked List Cycle",
+            "slug": "linked-list-cycle",
+            "url": "https://leetcode.com/problems/linked-list-cycle/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 6,
+      "day": 6,
+      "kind": "project-deep",
+      "title": "Payment System · Deep Dive 与 Senior 修复",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "Deep Dives",
+          "instruction": "围绕 Payment System 逐个回答机制、规模阈值和失败语义。",
+          "minutes": 50
+        },
+        {
+          "title": "精确补课",
+          "instruction": "只读今天列出的 Core / Technology / Pattern / DDIA 小节。",
+          "minutes": 30
+        },
+        {
+          "title": "Senior/Staff 追问",
+          "instruction": "先口述回答，再对照详细答案；为每个追问写证据。",
+          "minutes": 40
+        },
+        {
+          "title": "故障注入与修复",
+          "instruction": "把超时、重复、乱序、热点或部分失败注入白板后重答。",
+          "minutes": 40
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "Potential Deep Dives",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#potential-deep-dives"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "1) The system should be highly secure",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#1-the-system-should-be-highly-secure"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "2) The system should guarantee durability and auditability with no transaction data ever being lost, even in case of failures.",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#2-the-system-should-guarantee-durability-and-auditability-with-no-transaction-data-ever-being-lost-even-in-case-of-failures"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "3) The system should guarantee transaction safety and financial integrity despite the inherently asynchronous nature of external payment networks",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#3-the-system-should-guarantee-transaction-safety-and-financial-integrity-despite-the-inherently-asynchronous-nature-of-external-payment-networks"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "4) The system should be scalable to handle high transaction volume (10,000+ TPS)",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#4-the-system-should-be-scalable-to-handle-high-transaction-volume-10000-tps"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "Bonus Deep Dives",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#bonus-deep-dives"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "1) How can we expand the design to support Webhooks?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#1-how-can-we-expand-the-design-to-support-webhooks"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "What is Expected at Each Level?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#what-is-expected-at-each-level"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "Senior",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#senior"
+        },
+        {
+          "source_id": "hi.core.api-design",
+          "page_title": "API Design",
+          "heading": "HTTP Methods",
+          "url": "https://www.hellointerview.com/learn/system-design/core-concepts/api-design#http-methods"
+        },
+        {
+          "source_id": "hi.pattern.scaling-writes",
+          "page_title": "Scaling Writes",
+          "heading": "Handling Bursts with Queues and Load Shedding",
+          "url": "https://www.hellointerview.com/learn/system-design/patterns/scaling-writes#handling-bursts-with-queues-and-load-shedding"
+        },
+        {
+          "source_id": "hi.core.data-modeling",
+          "page_title": "Data Modeling",
+          "heading": "Entities, Keys & Relationships",
+          "url": "https://www.hellointerview.com/learn/system-design/core-concepts/data-modeling#entities-keys--relationships"
+        },
+        {
+          "source_id": "hi.deep.postgres",
+          "page_title": "PostgreSQL",
+          "heading": "Transactions",
+          "url": "https://www.hellointerview.com/learn/system-design/deep-dives/postgres#transactions"
+        },
+        {
+          "source_id": "ddia.ch13",
+          "page_title": "13 流式系统的哲学",
+          "heading": "为可审计性而设计",
+          "url": "https://ddia.vonng.com/ch13/#id365"
+        },
+        {
+          "source_id": "ddia.ch12",
+          "page_title": "12 流处理",
+          "heading": "幂等性",
+          "url": "https://ddia.vonng.com/ch12/#sec_stream_idempotence"
+        },
+        {
+          "source_id": "ddia.ch8",
+          "page_title": "8 事务",
+          "heading": "ACID 的含义",
+          "url": "https://ddia.vonng.com/ch8/#sec_transactions_acid"
+        }
+      ],
+      "artifact": "提交 Payment System 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+      "acceptance": [
+        "逐项覆盖 Potential Deep Dives 的 4 个非功能目标与 Bonus Deep Dives 的 Webhooks 追问，并能说明方案代价。",
+        "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+        "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+        "mock 后记录 critical miss、修复动作和同题复测证据。"
+      ],
+      "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。",
+      "algorithms": {
+        "tag": "Linked List",
+        "mode": "timed",
+        "problems": [
+          {
+            "title": "Merge Two Sorted Lists",
+            "slug": "merge-two-sorted-lists",
+            "url": "https://leetcode.com/problems/merge-two-sorted-lists/"
+          },
+          {
+            "title": "Copy List with Random Pointer",
+            "slug": "copy-list-with-random-pointer",
+            "url": "https://leetcode.com/problems/copy-list-with-random-pointer/"
+          },
+          {
+            "title": "Find the Duplicate Number",
+            "slug": "find-the-duplicate-number",
+            "url": "https://leetcode.com/problems/find-the-duplicate-number/"
+          }
+        ]
+      }
+    },
+    {
+      "week": 6,
+      "day": 7,
+      "kind": "mock",
+      "title": "交易三题动态 Mock 与修复",
+      "time_blocks": [
+        {
+          "title": "算法 1",
+          "instruction": "独立作答；写出复杂度和一个反例。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 2",
+          "instruction": "延续同一 NeetCode tag block，不跨 tag 拼题。",
+          "minutes": 30
+        },
+        {
+          "title": "算法 3",
+          "instruction": "计时完成；只记录错因与下一次修复动作。",
+          "minutes": 30
+        },
+        {
+          "title": "交易主 Mock",
+          "instruction": "随机抽一题，先声明业务不变量，再画状态机、原子写入、外部调用与失败恢复；量化峰值争用。",
+          "minutes": 45
+        },
+        {
+          "title": "另两题一致性追问",
+          "instruction": "分别处理预留过期、并发竞价或支付超时，逐步说明每个重试看到的状态。",
+          "minutes": 30
+        },
+        {
+          "title": "僵尸写入与重复回调",
+          "instruction": "注入持锁 worker 暂停后恢复及 webhook 重复乱序，验证 fencing、幂等键、账本和对账是否闭环。",
+          "minutes": 40
+        },
+        {
+          "title": "不变量驱动修复",
+          "instruction": "选择首次被破坏的不变量，删除多余组件并补最小原子机制；用不同到达顺序重答并评分。",
+          "minutes": 45
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "hi.breakdown.ticketmaster",
+          "page_title": "Ticketmaster",
+          "heading": "1) How do we improve the booking experience by reserving tickets?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster#1-how-do-we-improve-the-booking-experience-by-reserving-tickets"
+        },
+        {
+          "source_id": "hi.breakdown.online-auction",
+          "page_title": "Online Auction",
+          "heading": "1) How can we ensure strong consistency for bids?",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/online-auction#1-how-can-we-ensure-strong-consistency-for-bids"
+        },
+        {
+          "source_id": "hi.breakdown.payment-system",
+          "page_title": "Payment System",
+          "heading": "3) The system should guarantee transaction safety and financial integrity despite the inherently asynchronous nature of external payment networks",
+          "url": "https://www.hellointerview.com/learn/system-design/problem-breakdowns/payment-system#3-the-system-should-guarantee-transaction-safety-and-financial-integrity-despite-the-inherently-asynchronous-nature-of-external-payment-networks"
+        }
+      ],
+      "artifact": "一份随机主 Mock，加一张三业务不变量矩阵；矩阵必须列出唯一座位、最高有效出价、资金守恒的写入原子点、外部副作用和对账方式。",
+      "acceptance": [
+        "能分别说明临时预留过期、并发更高出价、支付网关超时的确定状态结果，不能依赖“稍后重试”掩盖歧义。",
+        "至少对一个热点资源给出排队/削峰、条件写入或串行化策略，并量化锁等待、吞吐与用户公平性的代价。",
+        "支付方向包含幂等键、不可变账本、webhook 重复/乱序处理和对账；票务/竞拍包含过期或结束时刻裁决。"
+      ],
+      "repair": "若回答声称 exactly-once 或分布式锁即可保证正确，改写成至少一次消息 + 幂等状态机，加入持锁者暂停/回归与外部成功本地超时反例后重测。",
+      "algorithms": {
+        "tag": "Linked List",
+        "mode": "timed",
+        "problems": [
+          {
+            "title": "Reorder List",
+            "slug": "reorder-list",
+            "url": "https://leetcode.com/problems/reorder-list/"
+          },
+          {
+            "title": "Add Two Numbers",
+            "slug": "add-two-numbers",
+            "url": "https://leetcode.com/problems/add-two-numbers/"
+          },
+          {
+            "title": "LRU Cache",
+            "slug": "lru-cache",
+            "url": "https://leetcode.com/problems/lru-cache/"
+          }
+        ]
+      }
+    }
+  ]
+}

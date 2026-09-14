@@ -1,0 +1,72 @@
+{
+  "title": "Caching Strategy Whiteboard",
+  "language": "Chinese",
+  "style": "excalidraw-plus",
+  "layout": "architecture",
+  "summary": "缓存降低读延迟和数据库压力，关键风险集中在失效、热点和故障放大。",
+  "task": "给一个读多写少的高流量系统加缓存，同时说明一致性和故障风险。",
+  "constraints": [
+    "不是所有数据都值得缓存：优先缓存高频、昂贵、变化不频繁的数据",
+    "缓存失效、stampede、hot key 和 Redis 故障都要有处理策略",
+    "静态媒体优先 CDN，应用数据优先 Redis/cache-aside"
+  ],
+  "blocks": [
+    {
+      "id": "client",
+      "lane": "top",
+      "kind": "client",
+      "shape": "circle",
+      "title": "Client sees latency first",
+      "body": "用户感受到的是页面慢或失败。缓存设计要先保护读路径体验，而不是盲目把所有数据都塞进缓存。"
+    },
+    {
+      "id": "cdn",
+      "lane": "top",
+      "kind": "component",
+      "title": "CDN for shared edge reads",
+      "body": "静态资源、图片和公开响应优先放 CDN。它离用户近，能先挡住大量不需要进应用层的流量。"
+    },
+    {
+      "id": "app",
+      "lane": "middle",
+      "kind": "service",
+      "title": "Application owns cache policy",
+      "body": "Cache-aside 读路径先查缓存，miss 再查 DB 并回填。写路径需要明确删除缓存或更新缓存，避免长期脏读。"
+    },
+    {
+      "id": "redis",
+      "lane": "middle",
+      "kind": "cache",
+      "title": "Shared cache for expensive reads",
+      "body": "Redis 适合高频、昂贵、变化不太频繁的数据。TTL、eviction 和 key 设计会决定一致性和成本。"
+    },
+    {
+      "id": "local",
+      "lane": "middle",
+      "kind": "component",
+      "title": "Local cache only for tiny hot state",
+      "body": "进程内缓存可以保护极热点和 feature flag，但它更难失效。只放小而可容忍短暂过期的数据。"
+    },
+    {
+      "id": "db",
+      "lane": "bottom",
+      "kind": "database",
+      "title": "DB remains source of truth",
+      "body": "缓存不是新的事实来源。缓存故障时要能回源，但也要防止所有 miss 同时打爆数据库。"
+    }
+  ],
+  "connectors": [
+    {"from": "client", "to": "cdn", "label": "media hit"},
+    {"from": "client", "to": "app", "label": "API read"},
+    {"from": "app", "to": "redis", "label": "cache lookup"},
+    {"from": "app", "to": "db", "label": "miss / write"},
+    {"from": "app", "to": "local", "label": "hot fallback"}
+  ],
+  "callouts": [
+    {
+      "title": "Gotchas",
+      "body": "Stampede: request coalescing. Hot key: replicate or local cache. Redis down: circuit breaker before DB melts."
+    }
+  ],
+  "talk_track": "我会先说明为什么需要缓存：数据库读延迟或 CPU 已经成为瓶颈。默认我会用 cache-aside，读先查 Redis，miss 再查 DB 并回填；写路径更新数据库后删缓存。然后我会补上 stampede、hot key 和缓存故障时的保护。"
+}

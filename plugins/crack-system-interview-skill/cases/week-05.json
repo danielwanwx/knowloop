@@ -1,0 +1,425 @@
+{
+  "week": 5,
+  "theme": "协作编辑与不可信代码执行",
+  "audio_preview": {
+    "title": "第 5 周导览：两类隔离，两种收敛",
+    "script": "本周只有 Google Docs 和 LeetCode，但两题都值得完整两天。Google Docs 训练的是同一文档内的并发编辑：操作怎样获得稳定编号，断线后如何补差，所有客户端怎样收敛，presence 为什么可以丢而正文不可以。LeetCode 训练的是不可信代码隔离：提交怎样进入一次性执行环境，测试如何并行，最终 verdict 由谁唯一决定，十万人比赛怎样在短时间吸收尖峰。通读日必须把接口和高层设计连起来，不要只说协同算法或容器名。Docs 要画快照、操作日志、server version 与 WebSocket 广播；LeetCode 要画 submission、执行尝试、测试结果、verdict 和排行榜事件。深挖日再处理百万连接、日志压缩、旧 owner fencing、资源上限、无外网、执行节点崩溃与榜单收敛。两题的共同方法是把可重试尝试和唯一最终事实分开：编辑可以离线重放但必须按 client sequence 去重，测试可以重复运行但 submission 只能有一个 final verdict。mock 时会给你乱序编辑、超大热文档、恶意死循环和比赛开场洪峰。复盘必须拿指标说话：分叉率、补差大小、隔离违规、判题分歧、最老队列年龄。做完后，你应能解释什么时候追求确定性收敛，什么时候依靠强隔离和异步执行来守住系统边界。使用时先暂停音频，凭记忆画出事实状态、提交点和故障分支，再继续核对。每天结束前必须留下可复查的图、容量计算和一条 repair 记录；如果答案只能说出组件名，就回到原文对应标题，把请求时序与用户可见结果补全。周末的综合 mock 不追求背诵固定架构，而要在约束变化后仍能守住不变量、说明取舍，并用指标决定降级、扩展和回滚。"
+  },
+  "projects": [
+    {
+      "slug": "google-docs",
+      "title": "Google Docs",
+      "source": "hi.breakdown.google-docs",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "Defining the API",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Google Docs 端到端设计图：标出 文档快照、操作日志、版本向量与协作者 presence、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 并发编辑如何提交、排序、合并并广播给所有协作者 与 加载快照后接续操作日志，实时看到文字、光标与 presence，每条箭头标明协议或数据。",
+          "明确 协作服务器为编辑分配 serverVersion 并持久追加到文档日志，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 文档快照、操作日志、版本向量与协作者 presence，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we scale to millions of websocket connections?",
+          "2) How do we keep storage under control?",
+          "Some additional deep dives you might consider",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.google-docs",
+        "deliverable": "提交 Google Docs 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 3 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "Websockets: The Full-Duplex Champion",
+          "why": "承载双向编辑与重连补差。"
+        },
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Optimistic Concurrency Control",
+          "why": "用版本识别并发和旧写。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Normalization vs Denormalization",
+          "why": "权衡操作日志、快照和派生 presence。"
+        },
+        {
+          "source": "hi.deep.kafka",
+          "heading": "Fault Tolerance and Durability",
+          "why": "理解可重放编辑日志的副本、确认与恢复边界。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch12",
+          "heading": "失败后重建状态",
+          "why": "从快照与操作日志恢复协作分片。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "去重离线重放的编辑。"
+        },
+        {
+          "source": "ddia.ch10",
+          "heading": "共识",
+          "why": "理解单文档所有权与切换边界。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "编辑协议传的是操作，不是整份文档",
+          "body": "Google Docs 客户端不能每敲一个字就上传整篇正文，否则两个用户会用各自旧副本互相覆盖。编辑消息应包含 documentId、clientId、clientSeq、baseServerVersion 以及 insert/delete 的位置和内容；服务端接受后分配单调 serverVersion，并把规范化操作追加到文档日志。clientSeq 在单客户端内唯一，重发同一操作只返回原确认。Document 快照代表某个 coveredVersion，加载时先取快照，再补该版本之后的操作。操作日志还要保存协议版本，旧客户端字段经规范化后再进入统一序列，避免协议升级把同一份历史文档悄悄分叉。",
+          "takeaway": "用可去重的细粒度操作和服务端版本构成协作事实。"
+        },
+        {
+          "title": "并发编辑必须有确定性收敛规则",
+          "body": "Alice 与 Bob 都在 version 40 的同一位置插入字符时，服务端不能按网络到达顺序让不同副本各自解释。采用 OT 时，后到操作要相对于已接受操作做 transform，并以 clientId 等稳定规则处理同位置；采用 CRDT 时，字符位置标识和并发顺序也必须确定。关键不是背算法名字，而是证明所有客户端应用同一规范操作序列后得到相同文本。删除与插入重叠、两个删除交叉、离线批量回放都应写成测试向量，升级合并逻辑还要保留 algorithmVersion。",
+          "takeaway": "选择一种合并模型，并用具体冲突向量证明所有副本收敛。"
+        },
+        {
+          "title": "确认丢失时靠 clientSeq 去重",
+          "body": "服务端可能已持久化 edit 并广播，但给发起者的 ack 在网络中丢失。客户端重连后会再次发送 clientId、clientSeq；协作分片先查询去重记录，若已接受就返回对应 serverVersion，而不是重复插入文字。客户端维护 lastAppliedServerVersion，收到广播若版本已有则忽略，若出现缺口先暂停实时应用并请求缺失区间。只有在连续补齐后才恢复 live stream，避免界面看似在线却永久少一段编辑。去重记录必须与文档日志同一事务提交，不能只放在会随连接重启消失的内存里。",
+          "takeaway": "发送序号解决重复，服务端序号发现缺口，两者职责不同。"
+        },
+        {
+          "title": "documentId 决定协作分片与连接归属",
+          "body": "同一文档的活跃编辑应汇聚到一个带 ownershipEpoch 的协作分片，才能顺序化操作并及时广播。连接入口查询目录，把 documentId 路由到当前 owner；扩容时新 owner 先载入快照与日志水位，再提升 epoch，旧 owner 即使仍持有 WebSocket 也不能提交操作。百万连接的容量要按每连接内存、心跳频率和每文档消息扇出计算，热门文档可独占分片，但不能拆成两个同时接受写入的 owner。目录缓存必须采用短时有效期，并由写存储复核所有权世代，才能挡住网络分区后迟到的旧连接。",
+          "takeaway": "连接可以分散，单文档写入所有权必须带 epoch 转移。"
+        },
+        {
+          "title": "快照压缩要保留可验证的覆盖水位",
+          "body": "操作日志无限增长会拖慢打开文档和灾难恢复。压缩 worker 读取 snapshot@1000 与之后连续操作，生成 snapshot@5000，验证内容哈希后原子发布新指针；只有当所有需要的离线窗口、审计策略和副本都越过 5000，旧日志才可删除。压缩任务按 targetVersion 幂等，失败不影响当前快照。若新快照校验不一致，保留原日志并报警，而不是把错误文本设为基线。大文档可分块快照，但块目录也必须对应一个一致版本。",
+          "takeaway": "先证明新快照完整覆盖，再推进删除水位。"
+        },
+        {
+          "title": "presence 是软状态，正文不是",
+          "body": "光标、选区和在线头像允许短暂丢失，应通过心跳和 TTL 存在内存或快速存储中；客户端每隔一段时间上报 cursor 相对当前 serverVersion 的位置，其他人若版本不同可暂缓或变换显示。协作服务重启后 presence 自然过期并由在线客户端重报，不需要从正文日志恢复。运营时分别看编辑确认 p99、远端可见延迟、serverVersion 缺口与收敛哈希；presence 则看心跳超时、幽灵用户和广播丢弃。把两类指标混在一起会掩盖真正的数据分叉。",
+          "takeaway": "可重建的在线感知走 TTL，文档内容走耐久版本日志。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "两个人在同一位置同时插入字符，系统如何保证最终文本一致？",
+          "trigger": "候选人只说 WebSocket 广播，未定义并发操作的合并语义。",
+          "answer": "两条操作都携带相同 baseServerVersion。协作 owner 先接受其中一条并分配下一 serverVersion；处理另一条时依据已接受操作做 transform，或用 CRDT 的稳定位置标识决定顺序。同位置冲突必须使用确定 tie-break，例如 clientId，而不能依赖各客户端本地到达顺序。服务端广播规范化后的操作和版本，所有副本按同一序列应用。测试至少覆盖插入/插入、插入/删除与删除/删除，并比较最终内容哈希。",
+          "follow_up": "合并算法升级时，旧客户端产生的操作如何保持兼容？",
+          "common_miss": "把传输顺序当作并发语义，无法解释离线编辑或跨服务器重放。",
+          "repair": "手算 baseVersion 相同的三组冲突，列出 transform 前后的位置。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-docs",
+              "heading": "2) Multiple users should be able to edit the same document concurrently."
+            },
+            {
+              "source": "hi.pattern.dealing-with-contention",
+              "heading": "Optimistic Concurrency Control"
+            }
+          ]
+        },
+        {
+          "question": "编辑已保存并广播，但原客户端没收到 ack，重连后怎么办？",
+          "trigger": "候选人让客户端生成新操作编号再次提交，导致文字重复。",
+          "answer": "客户端必须保留原 clientId、clientSeq 和操作体。重连时先发送 lastAppliedServerVersion 与未确认序号；服务端的去重索引若已有该 clientSeq，就返回原 serverVersion，不重新执行。随后按 serverVersion 补齐缺失广播，客户端忽略已应用版本并在发现跳号时请求区间。只有服务端明确未见该序号才重新接收原操作。这个协议同时处理 ack 丢失、广播重复和进程重启，不依赖连接恰好一次。",
+          "follow_up": "去重记录可以在什么时候安全清理？",
+          "common_miss": "把连接恢复写成重新加载全文，却没有未确认本地操作的去向。",
+          "repair": "画 persist、broadcast、ack 丢失、reconnect、dedupe 五步时序。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-docs",
+              "heading": "3) Users should be able to view each other's changes in real-time."
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "幂等性"
+            }
+          ]
+        },
+        {
+          "question": "客户端离线十分钟后带着一批旧编辑回来，如何重新接轨？",
+          "trigger": "候选人直接把旧文本覆盖服务端，或丢弃全部离线工作。",
+          "answer": "客户端上传的是带连续 clientSeq 和共同 baseServerVersion 的操作批，而不是完整正文。服务端先返回 base 之后的远端操作；客户端或 owner 按选定合并算法把离线操作逐条 rebase，并在每步保留确定顺序。若 base 已早于日志保留水位，则下载最新快照，再借助客户端保留的意图重放；无法自动合并的结构变化应显式提示冲突副本。成功后每个操作仍按原 clientSeq 去重，并获得新的 serverVersion。",
+          "follow_up": "若离线期间对应段落被另一用户全部删除，插入意图落在哪里？",
+          "common_miss": "把离线同步简化为 last-write-wins，导致大段协作成果丢失。",
+          "repair": "构造删除段落与离线插入的冲突样例，写出产品可接受的结果。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-docs",
+              "heading": "3) Users should be able to view each other's changes in real-time."
+            },
+            {
+              "source": "hi.pattern.realtime-updates",
+              "heading": "\"How do you handle connection failures and reconnection?\""
+            }
+          ]
+        },
+        {
+          "question": "怎样扩到百万 WebSocket，同时避免同一文档出现两个写 owner？",
+          "trigger": "候选人把负载均衡器轮询到任意服务器，没有连接目录和切换协议。",
+          "answer": "入口按 documentId 查询目录并路由到当前协作分片，分片可持有很多文档连接；热门文档单独隔离。所有权记录含 ownerId、epoch 和日志水位。切换时新 owner 从快照与日志追到水位，再条件提升 epoch；旧 owner 的后续写因 fencing token 过期被事实存储拒绝，客户端收到重定向后带 lastServerVersion 重连。容量按连接内存、心跳、编辑率和每文档扇出估算，而不是只报机器连接上限。",
+          "follow_up": "目录短暂返回旧 owner 时，客户端会看到什么？",
+          "common_miss": "只会增加 socket server，忽略状态共置与双主写入。",
+          "repair": "补一张 owner epoch 切换图，并模拟旧连接迟到提交。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-docs",
+              "heading": "1) How do we scale to millions of websocket connections?"
+            },
+            {
+              "source": "hi.pattern.realtime-updates",
+              "heading": "Server-Side Push/pull"
+            }
+          ]
+        },
+        {
+          "question": "什么时候可以删除被新快照覆盖的操作日志？",
+          "trigger": "候选人生成快照后立刻清日志，忽略离线客户端和副本。",
+          "answer": "新快照要标明 coveredVersion，并在独立位置完成内容哈希校验后才原子设为 current。日志删除水位取多个约束的最小值：所有耐久副本已拥有快照、允许的离线恢复窗口已越过、审计保留满足、没有正在从更早版本重建的任务。客户端 base 太旧时必须下载新快照，不能请求已删除区间。压缩失败或校验不一致时继续使用旧指针，旧日志保持可重放，避免一次后台任务破坏文档历史。",
+          "follow_up": "文档很大时，分块快照如何保证目录与各块属于同一版本？",
+          "common_miss": "只按时间 TTL 删除操作，不记录覆盖和消费者水位。",
+          "repair": "列出 snapshotVersion、replicaWatermark、offlineFloor 和 deleteFloor 的关系。",
+          "sources": [
+            {
+              "source": "hi.breakdown.google-docs",
+              "heading": "2) How do we keep storage under control?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "失败后重建状态"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "leetcode",
+      "title": "LeetCode",
+      "source": "hi.breakdown.leetcode",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 LeetCode 端到端设计图：标出 提交、测试执行、判题结果与竞赛排名事件、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 用户提交如何进入隔离执行、运行测试并生成最终 verdict 与 查看题目、轮询提交进度并低延迟读取竞赛榜，每条箭头标明协议或数据。",
+          "明确 判题协调器条件写入唯一 finalVerdict 及计分事件，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 提交、测试执行、判题结果与竞赛排名事件，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How will the system support isolation and security when running user code?",
+          "2) How would you make fetching the leaderboard more efficient?",
+          "3) How would the system scale to support competitions with 100,000 users?",
+          "4) How would the system handle running test cases?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.leetcode",
+        "deliverable": "提交 LeetCode 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 4 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.long-running-tasks",
+          "heading": "Workers",
+          "why": "管理隔离执行、进度和重试。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Handling Bursts with Queues and Load Shedding",
+          "why": "吸收竞赛开场提交尖峰。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Indexing for Access Patterns",
+          "why": "设计题目、提交和榜单查询。"
+        },
+        {
+          "source": "hi.deep.redis",
+          "heading": "Redis for Leaderboards",
+          "why": "实现竞赛实时排名并明确最终重算边界。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch11",
+          "heading": "工作流调度",
+          "why": "组织测试执行与 verdict 汇总。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "安全重试 submission/test case。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "维护物化视图",
+          "why": "从计分事件维护排行榜。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "Submission 必须冻结题目与运行环境",
+          "body": "LeetCode 用户点击提交时，系统创建不可变 submissionId，记录 sourceObject、languageRuntime、problemVersion、testSuiteVersion、比赛身份与 clientSubmitKey。题目后来修正测试或运行镜像升级，都不能悄悄改变已经给出的 verdict；重判应产生新的 evaluationVersion 并保留原因。源码体放对象存储，Submission 表只保存哈希和元数据。客户端重复点击使用同一 submitKey，返回原 submissionId，避免一个意图在队列里复制成多份昂贵执行。题目版本与运行镜像摘要共同写入审计记录，客服和出题人才能完整复现一次有争议的判题。",
+          "takeaway": "冻结代码、题目和环境版本，判题结果才可复现。"
+        },
+        {
+          "title": "不可信代码运行在一次性隔离舱",
+          "body": "执行 worker 不应直接在宿主进程运行用户代码。每个 TestExecution 启动只读基础镜像，挂载限额临时目录，使用非特权身份，关闭外网并限制系统调用、CPU 时间、内存、进程数和输出字节；超限由宿主 watchdog 终止。测试输入通过受控管道注入，标准输出截断后归档，秘密测试不暴露给容器。执行节点定期回收而非长期复用未知状态，镜像只从签名白名单加载。隔离违规和资源超限是不同 verdict，也要分别统计。",
+          "takeaway": "安全边界由宿主强制资源与能力限制，不能相信用户进程自觉退出。"
+        },
+        {
+          "title": "测试用例可以并行，最终判决只能汇总一次",
+          "body": "协调器把 submissionId 与 testCaseId 组成稳定任务键，按测试组并行派发；worker 回写 duration、memory、outputHash 和 result，重复尝试以 attempt 记录但不覆盖已确认结果。某些题可遇到首个失败就取消剩余任务，比赛评分题则可能需要全部分数。Verdict Aggregator 等待 required test 水位，按 problemVersion 的确定规则生成 finalVerdict，并用条件写从 RUNNING 推进到 FINAL。迟到 worker 只能补审计，不得把最终 WA 改回 AC。聚合器还要保存已消费测试用例集合的摘要与完成水位，以便及时发现测试遗漏、重复执行或版本混用。",
+          "takeaway": "执行并行化提高速度，submission 状态机守住唯一最终结果。"
+        },
+        {
+          "title": "队列按语言和资源画像隔离",
+          "body": "不同语言启动成本、内存和运行时长差异显著；把所有任务放进一个 FIFO，会让一批慢测试阻塞轻量提交。入口根据 languageRuntime、预计资源级别与比赛优先级选择队列，执行池预热对应镜像并设置并发配额。重试任务使用单独预算，基础设施错误可换节点重跑，确定性的编译错误不重试。调度指标包括 queue-to-start p95、各语言槽位利用、超时分布和最老任务，扩容要看瓶颈是冷启动、CPU、内存还是镜像拉取。",
+          "takeaway": "异构执行需要分类排队和配额，而不是一个无差别 worker 池。"
+        },
+        {
+          "title": "Leaderboard 是可重建的排名投影",
+          "body": "最终 verdict 生成 ScoreEvent，包含 contestId、userId、problemId、score、penalty 和 acceptedAt。实时榜可用 Redis sorted set 或内存分片维护，但耐久事实仍是不可变 ScoreEvent；重复 eventId 去重，用户总分变化通过确定的增量更新。排序规则必须编码总分、罚时和稳定 tie-break，不能只存一个浮点 score。比赛封榜时从事实事件重算最终名次，与实时投影对账；若 Redis 丢失，先恢复最近 checkpoint，再重放后续事件。实时榜单投影携带评分事件水位，客户端才能区分展示陈旧与名次真实变化。",
+          "takeaway": "实时排名追求快，最终排名必须能从计分事实重算。"
+        },
+        {
+          "title": "十万人开赛要保护执行面而非只扩 API",
+          "body": "比赛开始和临近结束会形成提交尖峰，真正昂贵的是编译与测试，不是创建一行 Submission。API 可快速持久化请求并返回 QUEUED，队列通过每用户并发限制和 contest 配额防止单人刷提交；执行池按预测提前预热，但保留全站普通练习的资源份额。若积压超过反馈目标，界面显示诚实等待时间，优先停止非关键分析任务。运营同时看接收成功率、判题最老年龄、每提交成本、sandbox 故障和榜单滞后，避免“API 还很快”掩盖反馈已经失效。",
+          "takeaway": "竞赛容量由安全执行槽决定，入口必须背压并展示真实进度。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "用户代码死循环、fork 炸弹或尝试访问网络时，哪一层负责阻止？",
+          "trigger": "候选人只说使用容器，没有列出具体隔离与资源策略。",
+          "answer": "宿主调度层创建一次性 sandbox：非特权用户、只读镜像、受限系统调用、独立 PID/网络命名空间、无外网、临时磁盘配额，以及 CPU、内存、进程数和输出字节硬限制。watchdog 依据墙钟与 CPU 时间终止任务，秘密测试通过受控输入注入。容器退出后销毁文件系统，节点达到运行次数或出现异常就回收。安全违规、资源超限和普通 WA 分开记录，便于发现攻击而不污染题目统计。",
+          "follow_up": "语言运行时本身需要子进程时，怎样设置进程限制而不误杀合法代码？",
+          "common_miss": "把 Docker 名称当作安全证明，未讨论网络、系统调用和宿主逃逸面。",
+          "repair": "列出 sandbox 能访问的 CPU、内存、文件、网络和系统调用白名单。",
+          "sources": [
+            {
+              "source": "hi.breakdown.leetcode",
+              "heading": "1) How will the system support isolation and security when running user code?"
+            },
+            {
+              "source": "hi.breakdown.leetcode",
+              "heading": "3) Users should be able to submit their solution and get instant feedback"
+            }
+          ]
+        },
+        {
+          "question": "一份 submission 有 200 个测试，怎样并行又保证 verdict 可复现？",
+          "trigger": "候选人让 worker 各自直接覆盖最终状态。",
+          "answer": "协调器用 submissionId、testCaseId、testSuiteVersion 生成稳定任务，worker 只提交该 case 的不可变结果和 attempt 元数据。Aggregator 按题目规则等待必需水位：普通题可在确定失败后取消未开始任务，计分题则汇总全部分数；最终结果通过版本条件写一次进入 FINAL。重跑相同 case 使用同一环境版本，输出可用 hash 对比。迟到结果保留审计但不能倒退 finalVerdict，从而兼顾并行速度与确定性。",
+          "follow_up": "取消信号到达时某些 worker 已在运行，如何处理其迟到结果？",
+          "common_miss": "把测试并发等同于多个服务同时写 Submission.status。",
+          "repair": "画 TestExecution 表与 Aggregator 水位，模拟一条重复和一条迟到结果。",
+          "sources": [
+            {
+              "source": "hi.breakdown.leetcode",
+              "heading": "4) How would the system handle running test cases?"
+            },
+            {
+              "source": "hi.pattern.long-running-tasks",
+              "heading": "Workers"
+            }
+          ]
+        },
+        {
+          "question": "worker 写完所有测试后崩溃，为什么用户仍能得到最终 verdict？",
+          "trigger": "候选人把汇总动作只放在执行进程内存中。",
+          "answer": "每个测试结果先持久化并带唯一任务键，完成写会产生可重复消费的 result event。Verdict Aggregator 从 TestExecution 表或事件水位判断 required cases 是否齐全，条件写 finalVerdict；若它崩溃，下一实例重新读取相同集合会计算同一结果。submissionId 的 FINAL 状态不可被普通更新覆盖，重复汇总返回已存在 verdict。监控长期 RUNNING 但测试齐全的记录并重新触发聚合，避免静默卡住。",
+          "follow_up": "测试规则升级后，需要重判旧 submission 时怎样保留两个结果？",
+          "common_miss": "依赖队列消费者恰好一次，未给聚合结果版本和修复扫描。",
+          "repair": "补充 evaluationVersion、requiredCount 和 stuck-finalizer 巡检。",
+          "sources": [
+            {
+              "source": "hi.breakdown.leetcode",
+              "heading": "4) How would the system handle running test cases?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "幂等性"
+            }
+          ]
+        },
+        {
+          "question": "实时榜单丢失一个 Redis 分片后，如何恢复且不改错名次？",
+          "trigger": "候选人把 sorted set 当成唯一计分数据库。",
+          "answer": "Redis 只保存按 contestId 分片的排名投影。每个 FINAL verdict 产生不可变 ScoreEvent，eventId 去重，排序字段明确总分、罚时与 tie-break。恢复时加载该比赛最近 checkpoint 的用户累计分，再按事件序号重放；期间可以返回带 asOf 水位的旧榜或暂时降级。重建完成后抽样与事实事件全量聚合比较，比赛封榜必须以可审计事件重算结果，而不是信任事故前的内存排名。",
+          "follow_up": "跨分片 top 100 如何合并，游标怎样保持稳定？",
+          "common_miss": "只讨论 Redis 主从切换，无法从业务事实证明榜单正确。",
+          "repair": "定义 ScoreEvent schema、checkpoint 水位和最终封榜对账。",
+          "sources": [
+            {
+              "source": "hi.breakdown.leetcode",
+              "heading": "2) How would you make fetching the leaderboard more efficient?"
+            },
+            {
+              "source": "hi.deep.redis",
+              "heading": "Redis for Leaderboards"
+            }
+          ]
+        },
+        {
+          "question": "十万人在最后一分钟提交，系统应该拒绝、排队还是扩容？",
+          "trigger": "候选人只报自动扩容，没有反馈时限和公平策略。",
+          "answer": "先快速持久化带比赛截止时间和 clientSubmitKey 的 Submission，接受与否以服务端收到时间为准；执行可以在赛后继续。队列按 contestId、语言和资源级别分流，每用户限制并发，预热池吸收预测峰值，并给非竞赛流量保留配额。若 queue-to-start 超过目标，暂停非关键分析、显示预计等待并限制重复提交。扩容依据最老任务、各语言槽位和 sandbox 启动耗时，不能让 API 成功率掩盖判题反馈已严重落后。",
+          "follow_up": "截止前收到但截止后才执行的提交，排名时间取哪个时刻？",
+          "common_miss": "把请求处理时间当比赛资格，或允许重试改变提交时间。",
+          "repair": "明确 acceptedAt、executionAt 与 leaderboard penalty 的关系。",
+          "sources": [
+            {
+              "source": "hi.breakdown.leetcode",
+              "heading": "3) How would the system scale to support competitions with 100,000 users?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Handling Bursts with Queues and Load Shedding"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

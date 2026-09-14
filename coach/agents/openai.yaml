@@ -1,0 +1,6 @@
+interface:
+  display_name: "Coach · 开练"
+  short_description: "面试与学习教练的快捷入口，接续同一份学习记录，逐层追问与复测"
+  default_prompt: "使用 $coach 接着上次练。"
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,41 @@
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*secret*
+*credentials*.json
+
+# Generated card artifacts
+*.excalidraw
+*-preview.svg
+*-result.json
+*-talk-track.mp3
+*.mp3
+*.wav
+
+# Python and OS noise
+__pycache__/
+*.py[cod]
+.DS_Store
+
+
+# Private coaching data: never publish learner artifacts
+.interview-coach-data/
+interview-training/
+/learner-state.md
+/sessions/
+/transcripts/
+/recordings/
+/resumes/
+*-transcript.*
+*-share-link.*
+
+# Local audit output
+/docs/qa-report.json
+
+# Private coaching database (never a public artifact)
+*.sqlite3
+*.sqlite3-*

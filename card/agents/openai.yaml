@@ -1,0 +1,4 @@
+interface:
+  display_name: "Card"
+  short_description: "Turn sources into visual study cards"
+  default_prompt: "Use $card to turn this material into a source-aligned Excalidraw study card with an editable link and concise talk track."

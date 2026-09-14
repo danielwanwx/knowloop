@@ -1,0 +1,642 @@
+{
+  "week": 8,
+  "theme": "地理检索、匹配与本地市场",
+  "audio_preview": {
+    "title": "Week 8｜Tinder、本地配送与 Yelp 两分钟预听",
+    "script": "这一周的三题都使用地理信息，却要求三种完全不同的正确性。Tinder 用距离和偏好生成候选，允许 feed 短暂陈旧，但一次 swipe 和双向 match 不能重复或丢失；Local Delivery Service 先找能在承诺时间内送达的仓库，再在下单事务里锁定真实库存，搜索页的“有货”不能冒充结算事实；Yelp 则让 Postgres 之类的权威库保存商家与评论，把全文、地理和排序投影到搜索引擎，并明确索引延迟。学习时不要只背 geohash。空间索引只负责减少候选，最终还要做精确距离、业务过滤和权限检查。缓存也只加速派生视图：Tinder 的候选栈、配送库存摘要、Yelp 的搜索结果都可能旧，真正改变关系、库存或评论的写入必须回到单一权威边界。深挖时重点练三个不变量：同一用户对同一 profile 只有一份当前 swipe 事实；同一库存单位不能卖给两张订单；同一用户对同一商家最多一条有效评论。最后把热点、陈旧窗口、重算路径和失败后的用户提示讲清楚，你就能从“会用地理数据库”提升到能设计可运营的本地市场系统。"
+  },
+  "projects": [
+    {
+      "slug": "tinder",
+      "title": "Tinder",
+      "source": "hi.breakdown.tinder",
+      "read": {
+        "headings": [
+          "Understand the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "The API",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 profile/preferences、candidate generation、swipe write、mutual match 和 notification 的 Tinder 白板。",
+        "acceptance": [
+          "候选生成与 swipe/match 写入分离，feed 可陈旧但关系状态有权威来源。",
+          "同一 user-target swipe 具备唯一键和幂等语义，并发双向 swipe 只生成一个 match。",
+          "距离、偏好、已看集合和隐私过滤均能映射到具体查询或投影。"
+        ],
+        "repair": "若白板只画 geo query 和 Redis，补上 Swipe、Match 两个实体及唯一约束，按两个用户同时右滑的时序重画事务边界。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we ensure that swiping is consistent and low latency?",
+          "2) How can we ensure low latency for feed/stack generation?",
+          "3) How can the system avoid showing user profiles that the user has previously swiped on?",
+          "Final Design",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.tinder",
+        "deliverable": "swipe 幂等事务、单分区 match、候选预计算与在线过滤、seen-set/Bloom 组合、热点和隐私 failure matrix。",
+        "acceptance": [
+          "两个用户并发右滑时只产生一个 match 和一次逻辑通知，重复请求不会放大。",
+          "预计算栈与在线 geo/index 查询的陈旧、成本和回填边界清楚。",
+          "已滑集合规模增大时能比较数据库过滤、缓存集合与 Bloom false positive 的产品代价。"
+        ],
+        "repair": "答不出一致性时写出 (viewer_id,target_id) 唯一键与 match canonical key；答不出性能时拆解 geo 候选、偏好过滤、seen 过滤和排序四段延迟。"
+      },
+      "concepts": [
+        {
+          "source": "hi.core.db-indexing",
+          "heading": "Geospatial Indexes",
+          "why": "生成距离范围内的候选集，再做精确距离和偏好过滤。"
+        },
+        {
+          "source": "hi.deep.cassandra",
+          "heading": "Data Modeling",
+          "why": "围绕 viewer、target 和单分区访问设计 swipe 表，而非照搬关系模型。"
+        },
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Conditional Writes",
+          "why": "让重复或并发 swipe 形成一次确定的关系转换。"
+        },
+        {
+          "source": "hi.core.caching",
+          "heading": "Cache-Aside (Lazy Loading)",
+          "why": "加速候选栈读取，同时保留权威过滤和失效路径。"
+        },
+        {
+          "source": "hi.deep.data-structures-for-big-data",
+          "heading": "Bloom Filter",
+          "why": "降低大规模已看集合查询，但显式承担 false positive。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch7",
+          "heading": "按键的哈希分片",
+          "why": "把用户 swipe 访问集中在可预测分区，并分析名人热点。"
+        },
+        {
+          "source": "ddia.ch8",
+          "heading": "防止丢失更新",
+          "why": "处理双向 swipe 与 match 创建的并发竞争。"
+        },
+        {
+          "source": "ddia.ch4",
+          "heading": "多维索引与全文索引",
+          "why": "理解距离、年龄、偏好等多条件候选检索的代价。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "把候选视图与关系事实分开",
+          "body": "Tinder 的候选栈是可重算的派生视图，Swipe 与 Match 才是不能随意丢失的关系事实。候选服务可以读取 geo index、偏好、活跃度和预计算分数，短暂返回旧排序通常只是体验问题；用户右滑后却必须立即写入权威 Swipe，并让后续候选过滤读到该事实。若双方都右滑，则以排序后的两个 user_id 作为 canonical match key，唯一约束保证只创建一次。这样缓存、预计算和搜索索引都可按性能独立演进，而不会把陈旧候选误当成可重复建立关系的许可。",
+          "takeaway": "feed 可以重算，swipe 与 match 必须有唯一、幂等的权威记录。"
+        },
+        {
+          "title": "Swipe 写入要同时低延迟和可重试",
+          "body": "客户端为一次 swipe 发送稳定 request_id，服务端以 (viewer_id,target_id) 作为业务唯一键执行 upsert，并保存方向、版本和时间。右滑事务写入后查询反向 swipe；若反向已为 like，则尝试插入 canonical match。两个方向同时到达时都可能判断满足条件，但 Match 唯一约束只允许一条，失败者读取已有结果。通知通过 outbox 异步发送并按 match_id 去重，不能把消息是否成功作为关系是否成立的依据。响应超时后客户端重试得到同一 swipe/match 状态，而不是再次触发配对。",
+          "takeaway": "唯一键解决重复事实，outbox 解决事实与通知之间的故障窗口。"
+        },
+        {
+          "title": "候选生成采用预计算与在线过滤组合",
+          "body": "完全在线查询能使用最新位置和偏好，却在高峰时把多维过滤、排序和排除集合都压到数据库；完全预计算读取快，但用户移动、修改偏好或被他人屏蔽后容易陈旧。更稳妥的方案是离线或异步为活跃用户生成较宽的候选池，在线读取时再按当前位置、年龄、隐私、block 和最新 swipe 做最终过滤，池低于阈值时补充。缓存保存候选 ID 和生成版本，不保存关系真相。监控 pool hit、filter rejection、refill latency 和空栈率，才能判断该增加预计算还是优化索引。",
+          "takeaway": "预计算降低成本，在线权威过滤守住新鲜度和安全边界。"
+        },
+        {
+          "title": "已看集合是精确性与成本的选择",
+          "body": "最直接的做法是在候选查询中排除所有历史 swipe，但集合增大后 join 或巨大 NOT IN 会拖慢请求。可把近期 swipe 放入按用户分区的 Redis Set，长期事实保留在数据库；候选服务批量检查缓存，miss 时查询数据库并回填。Bloom Filter 能用更少内存快速判定“肯定没看过”，但 false positive 会错误隐藏本可展示的人，因此只能在候选充足且产品接受少量漏展示时使用，不能拿它判断 match。过滤结果还要区分 swipe、block、report 和 unmatch，因为这些状态的保留期与安全要求不同。",
+          "takeaway": "近似结构只能优化候选筛选，不能决定用户关系或安全状态。"
+        },
+        {
+          "title": "地理检索先取候选再精确判断",
+          "body": "geo index 把用户位置映射到 cell 或空间树，查询当前及相邻区域可快速缩小候选范围，但 cell 覆盖的是近似形状，必须再计算精确距离。位置记录带 timestamp 和精度，过旧或精度不足时降低排名或不展示；最大距离、年龄和偏好作为在线过滤，而不是为每种组合建立爆炸式索引。高密度城市会形成热点 cell，可动态细分或复制只读候选；低密度区域逐级扩大半径。原始精确位置属于敏感数据，候选响应只暴露模糊距离，访问和保留都应最小化。",
+          "takeaway": "空间索引优化搜索范围，精确过滤和隐私规则决定是否真的可展示。"
+        },
+        {
+          "title": "Senior 要主动覆盖删除、屏蔽与热点",
+          "body": "真实系统不仅处理右滑，还要处理 block、report、账号删除、位置撤回和名人流量。block 必须在候选在线过滤和消息入口都立即生效，不能等待异步索引最终收敛；删除流程需要从候选池、缓存和搜索投影清除，同时按法规处理权威记录。热门 profile 会让 target 分区和反向查询过热，可按 viewer 分区保存 swipe、异步聚合 popularity，并对可见范围限流。指标应包含 swipe p99、duplicate request、match uniqueness conflict、candidate rejection reason、block leakage 和 empty-stack rate。运营还要定期抽样检查被屏蔽用户是否意外出现在候选、通知或推荐回填中。",
+          "takeaway": "Senior 深度体现在安全状态优先级、删除传播和热点访问模型。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "两位用户同时右滑，如何保证只产生一个 Match？",
+          "trigger": "候选人先读反向 swipe 再直接 insert，没有并发保护。",
+          "answer": "每次 swipe 先以 (viewer_id,target_id) 唯一键幂等写入。判断双方都 like 后，使用 min(userA,userB)、max(userA,userB) 组成 canonical match key，在数据库执行唯一插入；两个请求都到达也只有一个成功，另一个读取已存在 Match。关系事实和 notification outbox 在同一事务中写，后台至少一次发通知并以 match_id 去重。这样不依赖跨请求锁，也不会因客户端重试创建重复关系。若 unmatch 后允许再次配对，则需要显式 generation/version，而不是复用模糊布尔值。",
+          "follow_up": "Match 已提交但响应丢失，客户端如何确认结果？",
+          "common_miss": "用“先查再写”假设消除竞争，忽略唯一约束和通知重复。",
+          "repair": "并排画两个 swipe 事务，在 Match insert 处标出唯一键、winner 与 loser read。",
+          "sources": [
+            {
+              "source": "hi.breakdown.tinder",
+              "heading": "1) How can we ensure that swiping is consistent and low latency?"
+            },
+            {
+              "source": "hi.pattern.dealing-with-contention",
+              "heading": "Conditional Writes"
+            }
+          ]
+        },
+        {
+          "question": "候选栈如何在低延迟与最新位置之间取舍？",
+          "trigger": "候选人只选预计算或只选在线查询，没有陈旧边界。",
+          "answer": "我会预计算一个较宽候选池，降低每次请求的多维检索成本；在线读取时再用最新位置、偏好、block 和 swipe 事实过滤并排序。候选池带 generated_at 与规则版本，位置移动或偏好变化可触发失效，但不要求每个事件立即重建全部列表。池低于阈值时异步补充，极端情况下回退到受限在线查询。产品明确候选位置允许多旧，并监控 filter rejection、pool age、refill latency 与 empty-stack。低延迟来自减少在线候选生成，不来自跳过最新安全和关系检查。",
+          "follow_up": "用户从纽约飞到旧金山后，怎样避免继续展示旧城市候选？",
+          "common_miss": "把 cache hit 当成正确结果，没有在线验证。",
+          "repair": "把候选生成拆成离线 pool、在线 filter、refill 三步并标出版本。",
+          "sources": [
+            {
+              "source": "hi.breakdown.tinder",
+              "heading": "2) How can we ensure low latency for feed/stack generation?"
+            },
+            {
+              "source": "hi.core.caching",
+              "heading": "Cache Consistency"
+            }
+          ]
+        },
+        {
+          "question": "数亿次历史 swipe 怎样避免重复展示，又不让查询变慢？",
+          "trigger": "候选人把完整 ID 集合塞进单个请求或单个 Redis key。",
+          "answer": "权威 Swipe 按 viewer_id 分区并对 target_id 建复合键，保证精确查询和幂等写。在线候选批量检查近期 Redis Set，长期集合可按时间分段或由数据库批量过滤；缓存丢失时仍能回权威数据。Bloom Filter 适合快速排除“可能看过”的候选，节省远程查询，但 false positive 会漏展示，因此只能作为优化，并在候选不足时绕过或重建，绝不能用于 Match 判断。还要给 block/report 单独精确集合，因为安全状态不接受近似误判。",
+          "follow_up": "Bloom Filter 饱和后如何滚动升级而不突然重复展示？",
+          "common_miss": "忽略 false positive 的产品后果，或把所有用户历史放进一个热点集合。",
+          "repair": "为近期、长期、block 三类集合分别写存储、精度和回源策略。",
+          "sources": [
+            {
+              "source": "hi.breakdown.tinder",
+              "heading": "3) How can the system avoid showing user profiles that the user has previously swiped on?"
+            },
+            {
+              "source": "hi.deep.data-structures-for-big-data",
+              "heading": "Bloom Filter"
+            }
+          ]
+        },
+        {
+          "question": "为什么不把 Swipe 和 Match 都只放 Redis？",
+          "trigger": "候选人以低延迟为由让缓存成为唯一关系存储。",
+          "answer": "Redis 的原子操作适合降低写延迟，但关系事实需要持久、可审计、可恢复，并支持删除和客服查询。若 Redis 是唯一来源，故障、淘汰或错误配置可能永久丢失 swipe；异步回写又会产生已通知 Match 却未落权威库的窗口。我会让数据库或具备持久一致保证的单分区存储保存 Swipe/Match，用 Redis 缓存近期 seen set 和候选池；若采用 Redis 原子脚本加速，成功后仍通过日志/outbox 持久化，并定义读取和重建边界。技术选择必须说明数据丢失预算。",
+          "follow_up": "若数据库写延迟突然升高，产品如何降级而不丢 swipe？",
+          "common_miss": "只谈性能，不谈持久性、重建和用户关系风险。",
+          "repair": "列出关系事实与派生缓存，模拟 Redis 全失效后的重建过程。",
+          "sources": [
+            {
+              "source": "hi.breakdown.tinder",
+              "heading": "Senior"
+            },
+            {
+              "source": "ddia.ch2",
+              "heading": "可靠性与容错"
+            }
+          ]
+        },
+        {
+          "question": "精确位置既用于匹配又高度敏感，系统边界如何设计？",
+          "trigger": "候选人只讨论 geohash 性能，没有隐私和删除。",
+          "answer": "位置接入保存最小必要精度和短保留窗口，原始坐标加密并限制只有候选服务按目的访问；普通 API 只返回模糊距离，不暴露坐标或精确 cell。候选索引使用不可直接还原或粗粒度位置，并把 block、隐身和位置权限作为在线强制过滤。日志和分析事件避免携带原始坐标，调试使用受审计采样。用户撤回权限或删除账户时，权威位置、缓存、候选池和异步索引都有可追踪清除任务，监控 block leakage 与 deletion lag，而不是只删主表。",
+          "follow_up": "为反欺诈需要保留位置时，如何限制用途扩张？",
+          "common_miss": "把 geohash 当匿名化，忽略其可反推区域和关联身份。",
+          "repair": "画原始位置、索引位置、API 输出三种数据形态及访问主体。",
+          "sources": [
+            {
+              "source": "hi.core.db-indexing",
+              "heading": "Geospatial Indexes"
+            },
+            {
+              "source": "hi.breakdown.tinder",
+              "heading": "Senior"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "gopuff",
+      "title": "Local Delivery Service",
+      "source": "hi.breakdown.gopuff",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "Defining the API",
+          "High-Level Design"
+        ],
+        "deliverable": "一张从地址到配送中心候选、库存查询、购物车结算、库存扣减和订单履约的 Local Delivery Service 白板。",
+        "acceptance": [
+          "搜索可用性与结算库存分离，页面缓存不会成为超卖依据。",
+          "下单在单一权威边界内验证并扣减库存，重复请求返回同一订单。",
+          "距离候选、交通 ETA 和配送中心容量分别有清晰职责与降级。"
+        ],
+        "repair": "若设计通过两个独立数据库加分布式锁下单，先尝试把订单和库存 colocate 到单个 Postgres 事务，再用规模证据证明何时必须拆分。"
+      },
+      "deep": {
+        "headings": [
+          "Deep Dives",
+          "1) Make availability lookups incorporate traffic and drive time",
+          "2) Make availability lookups fast and scalable",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.gopuff",
+        "deliverable": "候选仓库粗筛与 ETA 精排、库存事务、cache/read-replica 陈旧边界、分区策略和仓库故障 runbook。",
+        "acceptance": [
+          "附近仓库先按地理粗筛，再只对少量候选调用交通 ETA，避免 N 次昂贵外部请求。",
+          "库存扣减用条件更新或单库事务证明不超卖，锁失败和事务重试有界。",
+          "缓存、读副本和 partition 的陈旧窗口不会越过 checkout 正确性边界。"
+        ],
+        "repair": "如果把 availability 当一个布尔值，分成 catalog visibility、cached estimate、authoritative stock 和 reserved quantity 四层，并写明每层过期与回源。"
+      },
+      "concepts": [
+        {
+          "source": "hi.core.db-indexing",
+          "heading": "Geospatial Indexes",
+          "why": "按地址快速找少量附近配送中心，而不是扫描全部仓库。"
+        },
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Conditional Writes",
+          "why": "在库存扣减时验证 available >= requested，防止并发超卖。"
+        },
+        {
+          "source": "hi.deep.postgres",
+          "heading": "Data Consistency",
+          "why": "把订单、库存 reservation 与幂等记录放进单一事务。"
+        },
+        {
+          "source": "hi.core.caching",
+          "heading": "Cache Consistency",
+          "why": "界定浏览页库存摘要和结算权威库存之间的陈旧语义。"
+        },
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "Scale Your Database Horizontally",
+          "why": "比较 read replica、按仓库分区和查询路由的适用条件。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch8",
+          "heading": "可串行化",
+          "why": "推导同一 SKU/仓库并发扣减时的正确事务边界。"
+        },
+        {
+          "source": "ddia.ch6",
+          "heading": "复制延迟的问题",
+          "why": "解释浏览页可以旧而 checkout 不能从滞后副本扣库存。"
+        },
+        {
+          "source": "ddia.ch7",
+          "heading": "面向多租户的分片",
+          "why": "把配送中心作为天然租户边界，分析跨仓订单的复杂度。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "可配送性不是简单的距离查询",
+          "body": "用户输入地址后，系统先用 geo index 找出覆盖半径内的配送中心，再结合营业状态、服务区域、当前容量和粗略 ETA 过滤。直接对所有仓库调用第三方交通服务会造成高延迟和成本，因此只对少量地理候选做精确 drive-time 估算，并缓存短期区域路况。返回结果要带估算时间和生成时刻，不能承诺为永久事实。地址解析失败或 ETA 服务降级时，可以回退到静态路网或距离阈值，同时扩大承诺时间；若无法安全判断则明确不可配送，而不是给出虚假快速承诺。",
+          "takeaway": "地理索引生成候选，交通、容量和服务边界共同决定可配送性。"
+        },
+        {
+          "title": "浏览库存与结算库存是两种读",
+          "body": "商品列表追求低延迟，可以从缓存或读副本读取仓库 SKU 的近似 available，并接受几秒陈旧；结算则会形成承诺，必须回权威主库重新验证。模型至少保存 on_hand、reserved、version，并让 available=on_hand-reserved 成为可检查不变量。缓存值应带 warehouse_id、SKU、version 与短 TTL，库存变更后主动失效，但即使消息丢失也只影响浏览展示，不会造成超卖。产品需允许“刚才显示有货、结算时售罄”的明确状态，并监控该比例决定是否缩短 TTL 或预留。",
+          "takeaway": "缓存回答可能有货，权威事务决定能否承诺。"
+        },
+        {
+          "title": "优先选择单库事务解决库存争用",
+          "body": "若一张订单由单个配送中心履约，可把 Order、OrderItem、Inventory 与 IdempotencyKey 放在同一 Postgres 分区或集群。事务先按稳定顺序锁定或条件更新所有 SKU，确保 available 足够，再创建订单和 reservation；任一 SKU 不足则整体回滚。相比跨两个数据库的分布式锁，这个基线更容易证明原子性、处理死锁并恢复。只有仓库数量、写吞吐或组织边界证明单库不可行时才按 warehouse_id 分区，而不是看到“本地配送”就主动引入复杂协调。上线后用锁等待、事务重试、死锁率和热 SKU 冲突证明是否真的需要拆分。",
+          "takeaway": "把共同变化的数据 colocate，通常比补偿跨库不一致更可靠。"
+        },
+        {
+          "title": "幂等下单与支付要分阶段",
+          "body": "客户端用稳定 checkout_id 提交，数据库唯一约束保证重试返回同一订单。库存 reservation 与订单 pending 可在事务内完成，支付调用在事务外通过 outbox 启动；支付成功推进 confirmed，失败或超时由持久化 timer 释放 reservation。不能在持有数据库锁时等待支付，也不能支付成功后才发现库存已卖光。若支付结果未知，订单保持 payment_pending 并查询支付方，释放动作必须检查 reservation version，防止旧 timer 清除已确认订单。每个阶段都有用户状态和可重试边界。",
+          "takeaway": "短事务锁库存，持久化工作流协调支付与超时。"
+        },
+        {
+          "title": "缓存与读副本必须携带陈旧预算",
+          "body": "availability 查询可以按 warehouse-SKU 缓存并批量读取，热门商品使用 request coalescing 和 jitter 避免过期回源。读副本承担商品详情和历史订单等容忍延迟的查询，但 checkout 读写必须路由主库或具备等价一致保证的 owner。系统在响应里可附 availability_version，结算请求提交看到的版本作为提示，不过最终仍由条件更新判断。指标应包含 cache age、replica lag、checkout stockout、stale-positive 和主库 fallback；若 lag 超标，停止从副本展示精确数量而不是继续假装新鲜。恢复后分批开放精确库存展示，避免缓存和副本同时回暖造成新的读风暴。",
+          "takeaway": "任何派生读都要声明最大陈旧、权威回源和超限降级。"
+        },
+        {
+          "title": "按仓库分区时守住单一所有权",
+          "body": "warehouse_id 是天然分区键，因为目录库存和大多数订单都在一个配送中心内完成，能把争用和故障隔离。路由目录把地址候选映射到 shard，库存写只由该 shard owner 接受；读缓存可以复制。仓库关闭或 shard 故障时，不能把原订单悄悄切到另一仓库，因为商品、价格、ETA 和 reservation 都可能不同，应取消旧 reservation 后重新报价并征得用户确认。再平衡要迁移版本和写所有权，旧 owner 通过 epoch 被 fencing。运营关注每仓 QPS、hot SKU、lock wait、stockout 与迁移冲突。",
+          "takeaway": "仓库分区降低跨节点事务，但故障转移仍是新的业务承诺。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "为什么不能从缓存直接判断库存并创建订单？",
+          "trigger": "候选人把低延迟 availability cache 当成库存 source of truth。",
+          "answer": "缓存可能因 TTL、失效消息丢失或副本延迟而高估库存；多个请求还会同时读到同一剩余数量。浏览页可用缓存提供近似结果，但 checkout 必须在权威库存行上执行条件更新 available >= requested，或在事务内锁定并扣减 reservation。条件失败返回明确售罄或重新报价，不能仅靠缓存补偿。缓存记录版本和短 TTL，库存提交后失效，用 stale-positive 与 checkout stockout 衡量体验。这样陈旧只造成一次结算失败，不会形成不可兑现订单。",
+          "follow_up": "热点 SKU 的权威行争用严重时，如何扩展而不超卖？",
+          "common_miss": "以为 cache decrement 的原子性自动覆盖数据库恢复和多区域问题。",
+          "repair": "画浏览读与 checkout 写两条路径，圈出唯一承诺点。",
+          "sources": [
+            {
+              "source": "hi.breakdown.gopuff",
+              "heading": "2) Make availability lookups fast and scalable"
+            },
+            {
+              "source": "hi.core.caching",
+              "heading": "Cache Consistency"
+            }
+          ]
+        },
+        {
+          "question": "分布式锁和单个 Postgres 事务，为什么优先后者？",
+          "trigger": "候选人无条件引入 Redis lock 协调库存与订单。",
+          "answer": "若订单与库存可以 colocate，Postgres 事务同时提供原子提交、崩溃恢复和约束检查，失败只需回滚；外部分布式锁还要处理 TTL、续租、旧持有者复活、锁成功但数据库失败以及 fencing。锁并不会自动让两个数据库形成事务。我的基线是在一个事务中按稳定顺序条件扣减 SKU、创建订单和 reservation，用 checkout_id 去重。只有数据必须跨独立 owner，且无法调整边界时才考虑 saga 或带 fencing 的协调，并明确中间状态和补偿。",
+          "follow_up": "一张订单必须跨两个仓库履约时，状态机如何变化？",
+          "common_miss": "把“锁住了”当成持久性和原子性的证明。",
+          "repair": "列出 lock 服务和 DB 各自在五个故障点的状态，再与单事务比较。",
+          "sources": [
+            {
+              "source": "hi.breakdown.gopuff",
+              "heading": "2) Customers should be able to order items."
+            },
+            {
+              "source": "ddia.ch8",
+              "heading": "可串行化"
+            }
+          ]
+        },
+        {
+          "question": "怎样把交通时间纳入可配送仓库选择，又不为每次请求调用所有仓库？",
+          "trigger": "候选人要么只算直线距离，要么对全量仓库同步请求 ETA。",
+          "answer": "先用服务区域或 geospatial index 找出少量附近仓库，再根据营业、库存摘要和容量过滤，最后只对前 N 个候选调用或批量调用 ETA 服务。区域路况可按 origin cell、destination cell 和时间桶短期缓存，响应带生成时间；ETA 服务故障时回退静态路网或保守距离模型，并扩大承诺窗口。最终选择还要验证 checkout 时库存，不把 ETA 结果与商品承诺混为一谈。监控候选数、ETA 调用率、误差、fallback 和超时成本。",
+          "follow_up": "交通突发变化导致已下订单延迟，是否自动换仓？",
+          "common_miss": "没有粗筛，或把昂贵外部 ETA 放在无界 fanout。",
+          "repair": "画 geo 粗筛 → 库存摘要 → top-N ETA → checkout 四阶段漏斗。",
+          "sources": [
+            {
+              "source": "hi.breakdown.gopuff",
+              "heading": "1) Make availability lookups incorporate traffic and drive time"
+            },
+            {
+              "source": "hi.core.db-indexing",
+              "heading": "Geospatial Indexes"
+            }
+          ]
+        },
+        {
+          "question": "读副本能否承担所有 availability 查询？",
+          "trigger": "候选人只说加 read replica，没有复制延迟语义。",
+          "answer": "浏览和搜索可从读副本读取近似库存，只要产品接受陈旧并在响应中避免承诺精确数量；checkout 不能依赖可能落后的副本做扣减判断，必须路由到库存 owner。副本 lag 超过阈值时，可以隐藏“仅剩 1 件”、回退缓存摘要或把结果标为需结算确认，而不是继续显示精确值。失效消息也可能先于或晚于复制，因此缓存回填要记录版本。监控 replica lag、stale positive、主库 fallback 和 checkout rejection，用这些证据决定副本是否真正改善体验。",
+          "follow_up": "用户刚取消订单后，如何让自己立即看到库存释放？",
+          "common_miss": "把读扩展与正确扣减混为同一问题。",
+          "repair": "为 browse、cart、checkout 三类读写分别标注主库、副本、缓存和陈旧预算。",
+          "sources": [
+            {
+              "source": "hi.breakdown.gopuff",
+              "heading": "2) Make availability lookups fast and scalable"
+            },
+            {
+              "source": "ddia.ch6",
+              "heading": "复制延迟的问题"
+            }
+          ]
+        },
+        {
+          "question": "库存 shard 故障时，能否直接把订单切到另一个仓库？",
+          "trigger": "候选人把跨仓切换当作透明基础设施 failover。",
+          "answer": "不能默认透明切换，因为另一仓库的商品、价格、税费、配送时间和真实库存都可能不同。对尚未承诺的搜索请求可重新选择候选；对已有 reservation 的订单，先确认旧 owner 是否提交，未知状态保持 pending 并恢复或对账，不能在新仓再次扣减。若明确未提交，可释放幂等意图、重新报价并让用户确认。每个仓库 shard 需要副本和明确 failover owner，epoch 防止旧主恢复后继续写。系统以 pending age、duplicate reservation、reprice rate 和 recovery lag 验证流程。",
+          "follow_up": "旧主隔离但仍可写本地磁盘时，如何防止 split brain 库存？",
+          "common_miss": "只考虑可用性，没有重新承诺对用户的产品影响。",
+          "repair": "区分 browse reroute、pre-order retry、committed order recovery 三种故障状态。",
+          "sources": [
+            {
+              "source": "hi.breakdown.gopuff",
+              "heading": "Senior"
+            },
+            {
+              "source": "ddia.ch7",
+              "heading": "请求路由"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "yelp",
+      "title": "Yelp",
+      "source": "hi.breakdown.yelp",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "Constraints",
+          "The Set Up",
+          "Defining the Core Entities",
+          "The API",
+          "High-Level Design"
+        ],
+        "deliverable": "一张包含 business/review 权威库、地理全文搜索索引、rating projection、读缓存和索引更新流的 Yelp 白板。",
+        "acceptance": [
+          "权威写模型与搜索派生模型分离，并说明 index lag 的用户语义。",
+          "附近搜索同时支持地理范围、文本、类别和排序，避免请求时全库扫描。",
+          "一用户一商家一评论和 rating aggregate 都有并发安全的更新方式。"
+        ],
+        "repair": "若把 Elasticsearch 当唯一数据库，先重画 Postgres 权威写入、outbox/CDC、索引 consumer 与重建流程，再标明哪些页面可容忍旧索引。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How would you efficiently calculate and update the average rating for businesses to ensure it's readily available in search results?",
+          "2) How would you modify your system to ensure that a user can only leave one review per business?",
+          "3) How can you improve search to handle complex queries more efficiently?",
+          "4) How would you modify your system to allow searching by predefined location names such as cities or neighborhoods?",
+          "Final Design",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.yelp",
+        "deliverable": "review 唯一约束、rating 增量与重算、geo/full-text 索引、location taxonomy、索引延迟和 moderation 修复矩阵。",
+        "acceptance": [
+          "评分投影保存 count/sum 或分布，重复事件不会重复计数且可从权威评论重建。",
+          "复杂搜索利用倒排、geo 与结构化 filter，不把所有排序放在应用内。",
+          "城市/社区边界有版本化 taxonomy，地址变更和索引重建可追踪。"
+        ],
+        "repair": "回答只剩“用 Elasticsearch”时，补写 mapping、索引文档、更新事件、refresh/lag、分页 cursor、重建和 source-of-truth 七项。"
+      },
+      "concepts": [
+        {
+          "source": "hi.deep.elasticsearch",
+          "heading": "Geospatial Search",
+          "why": "组合附近范围、文本和结构化过滤。"
+        },
+        {
+          "source": "hi.deep.elasticsearch",
+          "heading": "Mappings and Fields",
+          "why": "把 business、category、rating 与 location 建成可演化索引文档。"
+        },
+        {
+          "source": "hi.core.db-indexing",
+          "heading": "Inverted Indexes",
+          "why": "理解关键词搜索为什么不能靠普通 B-tree。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Normalization vs Denormalization",
+          "why": "区分权威评论和面向搜索的 business 聚合文档。"
+        },
+        {
+          "source": "hi.pattern.scaling-reads",
+          "heading": "Add External Caching Layers",
+          "why": "加速热门 business 详情，同时保留 review/rating 失效路径。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch4",
+          "heading": "全文检索",
+          "why": "理解倒排、分词和查询执行的核心成本。"
+        },
+        {
+          "source": "ddia.ch4",
+          "heading": "多维索引与全文索引",
+          "why": "分析地理、类别、评分和文本组合过滤。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "变更数据捕获",
+          "why": "把权威 business/review 变更可靠投影到搜索索引。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "权威数据库与搜索索引各司其职",
+          "body": "Business、Review、用户约束和审核状态应保存在支持事务与唯一约束的权威数据库；Elasticsearch 保存面向检索的反规范化 business document，包括名称、类别、坐标、rating 和部分展示字段。写入先提交权威状态和 outbox/CDC 位置，再由 consumer 幂等更新索引。搜索结果可能短暂旧，因此响应可携带 index_version 或更新时间；business 详情和写后读取必要时回权威库。索引丢失时能从数据库和变更日志全量重建，这一能力比声称双写“通常都成功”更重要。",
+          "takeaway": "数据库守住事实与约束，搜索引擎提供可重建的查询投影。"
+        },
+        {
+          "title": "附近搜索是多阶段查询",
+          "body": "用户查询“附近的川菜”包含文本、类别、地理范围、营业状态和排序。搜索引擎先用倒排匹配名称/类别，再用 geo shape 或 geo distance 过滤候选，最后按相关性、距离、rating 和质量信号排序；不能分别查数据库再在应用内对海量结果求交。空间索引返回近似候选后仍要精确距离判断，分页使用稳定 sort values/search_after，避免深 offset。位置或营业状态更新通过异步索引传播，产品明确最大 lag；紧急停业或安全下架需有快速 deny path。",
+          "takeaway": "复杂搜索把候选生成、精确过滤和稳定排序放在可索引的数据模型中。"
+        },
+        {
+          "title": "一用户一商家一评论靠约束",
+          "body": "Review 表使用 (user_id,business_id) 唯一键，create 采用条件插入，update 修改同一 review_id 并递增 version；客户端 request_id 处理响应丢失重试。若允许删除后重评，要明确软删除与 generation 语义，不能因 status=deleted 就绕过唯一性制造多条活跃记录。审核状态与正文分开，只有 approved 评论进入公开投影。并发编辑使用 optimistic concurrency，冲突让客户端基于最新版本重试。唯一约束比“先查询是否写过”可靠，因为两个请求可能同时通过查询。审计日志还要保留状态变化和审核理由，支持申诉、回滚与投影重建。",
+          "takeaway": "业务唯一键和版本控制让评论规则在并发下仍成立。"
+        },
+        {
+          "title": "评分聚合必须幂等且可重算",
+          "body": "搜索页不能每次扫描全部评论计算平均分。可维护每商家的 rating_count、rating_sum 和分布，评论创建、修改、删除生成带 event_id、old_rating、new_rating 的事件；聚合 consumer 记录已处理事件或使用版本条件，防止重复累加。聚合值更新后再投影到搜索索引和缓存，因此会有可度量 lag。夜间或按需 job 从 approved Review 重算并与增量结果对比，发现 drift 后修复。只存 average 无法正确处理删除和修改，也难以展示评分分布。发布重算结果时采用 generation 切换，并记录受影响商家和修正幅度供运营核验。",
+          "takeaway": "保存可逆统计量、事件幂等与重算通道，派生评分才值得信任。"
+        },
+        {
+          "title": "城市和社区是版本化地理分类",
+          "body": "“SoHo”或“湾区”不是简单字符串，它们有多边形边界、层级、别名、语言和版本。地址解析后得到坐标，location taxonomy 服务返回所属 city/neighborhood IDs；索引文档保存这些稳定 ID 和边界版本，查询按 ID filter。边界更新时通过后台 reindex 迁移受影响商家，期间可同时识别新旧版本并监控差异。用户输入别名先映射到 canonical location，再执行地理查询。不要把社区名直接写进每条记录后依赖模糊匹配，否则改名和重叠边界难以治理。",
+          "takeaway": "地名是有版本的领域数据，不是随手复制的展示字符串。"
+        },
+        {
+          "title": "搜索质量、审核与故障降级",
+          "body": "Yelp 的相关性会被刷评、重复商家、恶意关键词和热门地点流量影响。写入侧限制频率、验证业务唯一性并把可疑 Review 送审核；搜索侧只使用 approved 状态，紧急下架通过 deny list 立即覆盖陈旧索引。Elasticsearch 故障时可降级到热门类别缓存或按 business_id 详情查询，但不能返回未经权限和安全过滤的旧快照。指标包括 search p95、zero-result、index lag、rating drift、duplicate review conflict、moderation backlog 和 cache age。恢复时先重放 CDC，再抽样比对权威记录。索引恢复完成前保持安全过滤和降级标记，不能因流量压力提前解除保护。",
+          "takeaway": "搜索系统不仅追求召回和延迟，还要有安全覆盖、重建和质量证据。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "评分平均值如何低延迟更新，又避免重复事件算两次？",
+          "trigger": "候选人只说异步聚合，没有幂等或重算。",
+          "answer": "权威 Review 保存评分和状态，变更事务写 outbox。事件携带唯一 event_id、business_id、old_rating 与 new_rating；聚合器在同一事务记录已处理 event_id 并调整 rating_sum、rating_count 或分布，重复投递安全跳过。聚合结果再异步写搜索索引和缓存，允许短暂 lag。定期从 approved Review 全量或分区重算，与增量 projection 比较，发现 drift 后替换。这样低延迟来自增量计算，正确性来自幂等、可逆统计量和重算，而不是假设消息只到一次。",
+          "follow_up": "评论从 5 星改成 2 星，再被删除，三个事件如何更新统计？",
+          "common_miss": "只存 average，无法正确处理修改和删除。",
+          "repair": "用 count/sum 演算 create、update、delete，并重复投递其中一个事件。",
+          "sources": [
+            {
+              "source": "hi.breakdown.yelp",
+              "heading": "1) How would you efficiently calculate and update the average rating for businesses to ensure it's readily available in search results?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "变更数据捕获"
+            }
+          ]
+        },
+        {
+          "question": "如何保证一个用户对一家商家只有一条有效评论？",
+          "trigger": "候选人使用写前查询，没有数据库约束。",
+          "answer": "在 Review 上建立 (user_id,business_id) 唯一约束，创建用 conditional insert；若已存在则返回冲突或按产品语义转为更新。编辑携带 version 做 optimistic concurrency，避免两个设备相互覆盖。软删除后是否允许重评要明确：可以复用同一记录并递增 generation，仍保持唯一活跃事实。request_id 防止响应丢失重试，审核状态不改变业务唯一键。缓存和搜索索引只保存投影，不能承担约束。这样即使并发请求同时到达，也由原子唯一性而不是时间窗口决定结果。",
+          "follow_up": "用户删除账户后，评论匿名保留还是删除会怎样影响唯一键？",
+          "common_miss": "认为应用层先查就足够，忽略竞态与软删除语义。",
+          "repair": "同时发两个 create 请求，验证唯一约束、返回状态和投影事件。",
+          "sources": [
+            {
+              "source": "hi.breakdown.yelp",
+              "heading": "2) How would you modify your system to ensure that a user can only leave one review per business?"
+            },
+            {
+              "source": "hi.core.data-modeling",
+              "heading": "Entities, Keys & Relationships"
+            }
+          ]
+        },
+        {
+          "question": "文本、距离、类别和评分组合查询如何避免全库扫描？",
+          "trigger": "候选人只说 Elasticsearch，却没有 mapping 和查询阶段。",
+          "answer": "索引文档反规范化 business 名称、类别 IDs、geo_point、rating、营业状态和可搜索文本。查询先用倒排生成文本候选，同时应用 category/geo 过滤，再用 distance、relevance 与 quality signals 排序；需要精确距离时对有限候选复核。分页用 search_after 和稳定 tie-breaker，避免深 offset。字段 mapping、分析器和更新频率按查询设计，不能把所有字段设成全文。权威 business/review 仍在数据库，索引通过 CDC 更新并可重建，紧急下架由 deny filter 覆盖 lag。",
+          "follow_up": "用户翻页期间评分变化，如何减少重复和漏项？",
+          "common_miss": "技术名词代替数据模型，忽略稳定分页和索引陈旧。",
+          "repair": "写出索引 document、query/filter/sort 和 cursor 四部分。",
+          "sources": [
+            {
+              "source": "hi.breakdown.yelp",
+              "heading": "3) How can you improve search to handle complex queries more efficiently?"
+            },
+            {
+              "source": "hi.deep.elasticsearch",
+              "heading": "Pagination and Cursors"
+            }
+          ]
+        },
+        {
+          "question": "怎样支持按城市或社区名搜索，边界变化时怎么办？",
+          "trigger": "候选人把地名当 business 表中的自由文本。",
+          "answer": "建立 canonical location taxonomy：每个 city/neighborhood 有稳定 ID、多边形、层级、别名、语言和 version。商家地址 geocode 成坐标，再由 point-in-polygon 计算所属 location IDs；搜索索引保存 ID，而用户输入先解析别名到 canonical ID。边界或命名更新时生成新版本，后台重算受影响商家并 reindex，查询过渡期可识别两版，完成后收敛。监控 unresolved alias、边界重叠和 reindex lag。这样地名变化是可审计数据迁移，而不是批量改字符串。",
+          "follow_up": "一个商家同时属于多个重叠社区时，排序和展示如何定义？",
+          "common_miss": "只用 geohash，无法表达行政或产品定义的多边形区域。",
+          "repair": "设计 location、alias、boundary_version 三个实体并演示一次边界升级。",
+          "sources": [
+            {
+              "source": "hi.breakdown.yelp",
+              "heading": "4) How would you modify your system to allow searching by predefined location names such as cities or neighborhoods?"
+            },
+            {
+              "source": "hi.deep.elasticsearch",
+              "heading": "Geospatial Search"
+            }
+          ]
+        },
+        {
+          "question": "搜索索引落后时，用户刚提交的评论为什么没出现在搜索结果，如何处理？",
+          "trigger": "候选人承诺异步索引强一致，或让写请求同步等待 refresh。",
+          "answer": "写请求在权威数据库提交后立即返回 review_id 和 pending/approved 状态；详情页对作者可读权威记录或合并本地 write overlay，实现 read-your-writes。搜索与公开评分通过 CDC 异步更新，产品给出可接受 index lag，并监控事件 age。普通请求不应同步等待全局 refresh，因为会把搜索集群故障扩散到写入。若紧急删除或安全封禁，使用小型强制 deny path 覆盖陈旧索引。恢复时从 checkpoint 重放，并抽样比较索引文档与数据库版本。",
+          "follow_up": "CDC 消息永久丢失时，怎样发现并修复单个 business 文档？",
+          "common_miss": "没有区分作者写后体验、公共搜索和安全删除。",
+          "repair": "分别写 create response、author detail、public search、moderation delete 的一致性策略。",
+          "sources": [
+            {
+              "source": "hi.breakdown.yelp",
+              "heading": "Senior"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "保持系统同步"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

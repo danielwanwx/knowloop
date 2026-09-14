@@ -1,0 +1,611 @@
+{
+  "week": 3,
+  "theme": "长连接、实时扇出与会话恢复",
+  "audio_preview": {
+    "title": "第 3 周导览：实时不等于不落盘",
+    "script": "本周从 WhatsApp、FB Live Comments 和 Online Chess 练三种实时系统。共同点是用户期待马上看到变化，不同点是消息要保证可达、直播评论允许在超级热点时采样、棋局则必须维持严格轮次与公平时钟。通读日先完整画出发送、广播、落子三条主路径，并标记事实在哪里提交：消息表和设备确认水位、按直播排序的评论日志、按对局顺序接受的棋步。WebSocket、SSE、pub/sub 和连接目录都只是传输与路由工具；连接断开时，真正决定能否恢复的是持久日志、单调游标和幂等确认。深挖日要主动回答连接落在哪台服务器、服务器扩缩容时如何重新路由、通知丢失后怎样补读、慢客户端怎样背压。还要识别热点形态：十亿用户是连接规模，超级直播是单对象广播规模，五十万棋局是大量独立单写者。不要用一个万能队列抹平差异。mock 会故意制造 Redis 通知丢失、SSE 断线、游戏服务器双主和时钟偏差；你的答案必须说明用户看到什么、事实是否受损、如何从 last sequence 恢复。周末复盘时，用同一张表比较三题的顺序范围、可丢数据、重连协议与核心指标，直到你能清楚解释“实时体验”和“可靠事实”为什么是两条不同但相连的路径。使用时先暂停音频，凭记忆画出事实状态、提交点和故障分支，再继续核对。每天结束前必须留下可复查的图、容量计算和一条 repair 记录；如果答案只能说出组件名，就回到原文对应标题，把请求时序与用户可见结果补全。周末的综合 mock 不追求背诵固定架构，而要在约束变化后仍能守住不变量、说明取舍，并用指标决定降级、扩展和回滚。"
+  },
+  "projects": [
+    {
+      "slug": "whatsapp",
+      "title": "WhatsApp",
+      "source": "hi.breakdown.whatsapp",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 WhatsApp 端到端设计图：标出 消息、收件箱投递状态与设备确认、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 发送消息后如何持久化、路由到多设备并处理确认 与 在线低延迟收取与离线三十天补投消息，每条箭头标明协议或数据。",
+          "明确 消息与接收方投递记录持久化后向发送者返回 messageId，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 消息、收件箱投递状态与设备确认，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we handle billions of simultaneous users?",
+          "2) What do we do to handle multiple clients for a given user?",
+          "3) What happens if the WebSocket connection fails?",
+          "4) What happens if Redis fails to deliver a message?",
+          "5) How do we handle out-of-order messages?",
+          "6) How can we handle a \"last seen\" functionality?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.whatsapp",
+        "deliverable": "提交 WhatsApp 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 6 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "Websockets: The Full-Duplex Champion",
+          "why": "理解双向长连接、心跳与重连。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Indexing for Access Patterns",
+          "why": "为按聊天顺序和按用户 Inbox 查询建模。"
+        },
+        {
+          "source": "hi.deep.redis",
+          "heading": "Redis for Pub/Sub",
+          "why": "识别 pub/sub 通知不是耐久事实。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch6",
+          "heading": "复制延迟的问题",
+          "why": "解释多设备读到不同进度。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "幂等性",
+          "why": "保证重投与 ack 重试安全。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "不可靠的网络",
+          "why": "建立断线与结果未知语义。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "消息先落 Inbox，再追求实时到达",
+          "body": "发送接口为每条消息生成稳定 messageId，并记录 chatId、senderId、serverReceivedAt、内容引用和聊天内排序字段。对于最多一百人的群聊，可以在写消息后为每个接收设备写 Inbox 指针；消息正文只存一份，Inbox 保存 messageId、deviceId 与 delivered/acked 状态，避免复制大附件。服务端只有在消息及离线投递记录持久化后才向发送者确认 accepted，随后 Redis Pub/Sub 只是唤醒在线 Chat Server 的低延迟通道。这样订阅者暂时缺席不会让事实丢失，断线设备可在三十天窗口内按游标补取。附件上传走对象存储和签名 URL，聊天记录只引用 blob 元数据，发送链路不转发整段字节。",
+          "takeaway": "实时推送可以丢通知，消息与每设备待投记录不能只存在 Pub/Sub 中。"
+        },
+        {
+          "title": "两亿长连接需要连接目录与稳定路由",
+          "body": "十亿用户中若两亿同时在线，即使单台 Chat Server 维持一百万到两百万连接，也需要数百台主机，并额外预留发布和故障容量。WebSocket 入口先鉴权，再把 connectionId、userId、deviceId、serverId 和租约登记到连接目录。发送方不应广播给所有服务器：可按 userId 做一致性哈希，把同一用户路由到固定服务组；或由消息总线按用户主题把通知送到当前连接所在服务器。前者减少订阅数但再平衡复杂，后者更灵活却增加 broker 压力。服务器退出时先停止接收新连接，再让客户端带抖动重连，防止一台机器故障引发同时握手风暴。容量要计算文件描述符、每连接缓冲区、心跳流量和 TLS CPU，而不只是业务消息 QPS。",
+          "takeaway": "连接本身是需要分片、续租、排空和容量预算的状态。"
+        },
+        {
+          "title": "多设备把“已送达”从用户级拆成客户端级",
+          "body": "同一账号的手机在线、笔记本离线时，用户级 delivered 位无法回答笔记本还缺哪些消息。Clients 表按 userId 列出有效 deviceId、公钥、createdAt 与 lastActive，且应限制例如每账号三台设备；Inbox 也改为按 deviceId 维护游标或未确认项。新消息写入每个活跃设备的收件记录，在线设备立即推送，离线设备恢复后从自己的 cursor 同步。注销设备需要一个 membershipVersion，之后产生的消息不再写给旧设备；正在发送的批次若看到版本变化，必须按明确边界完成或重算。已读回执也要区分“某设备看到”和“用户任一设备看到”，再决定 UI 汇总语义。端到端加密场景还会要求为每台设备封装会话密钥，放大与设备数成正比。",
+          "takeaway": "设备是投递与加密的独立终点，不能用一个用户级 Inbox 假装所有客户端同步。"
+        },
+        {
+          "title": "WebSocket 心跳、ACK 与补同步各解决一类故障",
+          "body": "TCP keepalive 可能几分钟才发现半开连接，聊天应用可每十秒发送轻量 heartbeat，五秒未回应就判定失联；两亿在线用户意味着约两千万次 ping/pong 每秒，必须把这笔固定流量计入预算。服务器推送 messageId 后等待客户端 ACK，五百到两千毫秒内未确认可有限重发，因此 UI 要按 messageId 去重。连接关闭后客户端指数退避重连，并携带各聊天或全局 inbox cursor 拉取缺口。ACK 证明某设备收到，不证明用户阅读；heartbeat 证明近期通路可用，也不能替代持久 Inbox。切换网络时旧连接和新连接可能短暂共存，连接 epoch 决定哪条通道接受后续确认，避免旧连接晚到的 ACK 推进新会话游标。",
+          "takeaway": "心跳检测死链，ACK 缩短丢包恢复，Inbox 同步才提供最终补漏。"
+        },
+        {
+          "title": "顺序目标是所有客户端可解释，而非还原物理发送瞬间",
+          "body": "不同手机经不同 Chat Server 发消息，网络本就会乱序；要求全球绝对顺序会引入昂贵协调，而且用户通常更在意低延迟。可由接收消息的服务器写 serverReceivedAt，并以 (timestamp,messageId) 稳定排序；NTP 只保证大致接近，晚到消息偶尔插到上方是可接受产品行为。若需要可靠发现漏消息，可为每个 chat 分配单调 sequence，客户端看到 43 后直接收到 45，就按 44 的缺口请求 Inbox；安静聊天仍靠周期同步或心跳携带最高水位兜底。群聊迁移分片时，要让旧、新 owner 在一个 epoch 内交接 sequence，不能各自发号。客户端缓冲很短窗口即可平滑显示，无需等待所有可能迟到消息。",
+          "takeaway": "显示顺序、缺口检测和业务因果要分别定义，不能一句“按时间戳排序”包办。"
+        },
+        {
+          "title": "last seen 应从连接事件派生，而不是每次心跳写库",
+          "body": "若两亿用户每十秒心跳一次并都更新数据库，将产生每秒两千万次几乎没有业务价值的写，而且刚写完就可能过时。在线状态优先查询 Chat Server 的活跃连接目录；只有连接关闭、心跳判死或服务器排空时，才把 disconnectAt 写入 DynamoDB。一个用户有多设备时，只要任一有效连接存在就报告 ONLINE；最后一条连接消失才用条件表达式写入较大的时间戳，防止旧服务器的迟到事件把 last seen 倒退。服务器整机崩溃无法逐连接写断开时间，可按 server lease 到期批量推断，并把结果标记为近似。查询还必须经过隐私规则，例如只向联系人显示分钟粒度，避免把基础设施精度直接暴露成跟踪能力。",
+          "takeaway": "把高频在线信号留在内存，把低频断开事实有条件地落库。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "Redis Pub/Sub 在发布瞬间丢了一条消息，为什么在线用户最终仍能收到？",
+          "trigger": "候选人把 Redis 频道当消息事实库，或无法解释订阅者断开时的数据去向。",
+          "answer": "发送链路先把 messageId 与正文持久化，并为每个目标设备写入 Inbox，确认这些记录成功后才 publish。Redis Pub/Sub 只通知当前 Chat Server 立即推送，因此 at-most-once 的通知丢失不会抹掉 Inbox。客户端跟踪聊天 sequence 或 inbox cursor；收到 45 却没见 44 时立即发起 gap sync，心跳也可携带服务器端最高水位，安静聊天再以较低频率周期同步兜底。同步结果和实时推送可能重复，客户端按 messageId 去重。若持久化未成功则发送接口不返回 accepted，绝不能先 publish 再补写，否则订阅者会看到一条之后无法恢复的幽灵消息。",
+          "follow_up": "两亿客户端每三十秒轮询会产生约七百万 QPS，你怎样把补漏频率压下来？",
+          "common_miss": "用 Redis 副本解释 Pub/Sub 耐久性，却忽略没有订阅者时消息本来就不会保存。",
+          "repair": "把发送时序改成 Inbox commit→publish，并演练 publish 丢失、重复和聊天沉默三条恢复路径。",
+          "sources": [
+            {
+              "source": "hi.breakdown.whatsapp",
+              "heading": "4) What happens if Redis fails to deliver a message?"
+            },
+            {
+              "source": "hi.deep.redis",
+              "heading": "Redis for Pub/Sub"
+            }
+          ]
+        },
+        {
+          "question": "同一用户有手机、平板和电脑，其中电脑离线一周；你的投递状态怎样建模？",
+          "trigger": "候选人仍使用 userId 级单一已送达标记，无法说明某一设备补消息。",
+          "answer": "Clients 表维护 userId 到最多三台有效 deviceId 的映射，Inbox 或同步游标必须按 deviceId 保存。新消息正文只写一次，但为当时 membershipVersion 中的每台设备建立待投引用；手机和平板各自 ACK 后只推进自己的 cursor，电脑一周后仍能在三十天保留期内补取。注销电脑时记录 deactivatedAt 和新 membershipVersion，之后的消息不再为它放大；正在进行的发送按捕获到的版本完成，避免半批次随意变化。UI 若展示用户级 delivered，可以定义成“所有活跃设备收到”或“任一设备收到”，但底层证据不能合并丢失。加密密钥也按设备封装，使撤销设备具有可执行边界。",
+          "follow_up": "新增第四台设备时，它应该回放全部三十天消息还是从注册时刻开始？",
+          "common_miss": "只让发送服务向多条连接广播，没有为离线设备保留独立游标和生命周期。",
+          "repair": "为三个 deviceId 各画 Inbox 水位，再用注销和新增设备验证 membershipVersion。",
+          "sources": [
+            {
+              "source": "hi.breakdown.whatsapp",
+              "heading": "2) What do we do to handle multiple clients for a given user?"
+            }
+          ]
+        },
+        {
+          "question": "一台 Chat Server 维持一百万连接时突然宕机，怎样避免重连把剩余集群再次打垮？",
+          "trigger": "候选人只说负载均衡会把客户端分到其他服务器，没有重连控制与容量余量。",
+          "answer": "正常运行不能把每台机器用满，至少预留失去一个故障域后的连接、内存和心跳容量。客户端检测断线后采用指数退避加随机抖动，例如从一到三十秒分散尝试，并复用认证令牌，避免一百万次 TLS 与鉴权同时发生。入口按 userId 一致性哈希选择健康服务组，过载实例返回带 Retry-After 的明确拒绝，而不是接入后立即断开。新连接携带 deviceId 与上次 cursor，先完成轻量注册再限速补同步；历史消息拉取与实时心跳使用不同资源池，防止补数据挤掉所有在线连接。运维看每秒握手、连接建立 p99、认证依赖饱和、同步队列年龄和每机文件描述符水位。",
+          "follow_up": "一致性哈希把故障节点的用户集中映射到一个后继节点时，如何避免新的热点？",
+          "common_miss": "容量只按平均连接数配置，没有 N+1 余量，也没有客户端侧抖动和补同步限流。",
+          "repair": "做一次百万连接断开的故障演算，分别限制握手、鉴权、注册和历史回放速率。",
+          "sources": [
+            {
+              "source": "hi.breakdown.whatsapp",
+              "heading": "1) How can we handle billions of simultaneous users?"
+            },
+            {
+              "source": "hi.pattern.realtime-updates",
+              "heading": "Websockets: The Full-Duplex Champion"
+            }
+          ]
+        },
+        {
+          "question": "消息 45 先于 44 到达，你会在服务器等多久再交付，还是让客户端处理？",
+          "trigger": "候选人宣称网络消息天然有序，或为了绝对顺序无限缓冲。",
+          "answer": "聊天产品通常选择尽快展示而非等待未知时长。服务器给同一 chat 的消息分配 sequence 时，客户端收到 45 且当前水位是 43，先暂存 45 并立即请求 44；在很短的重排窗口内补到就顺序展示，超时则显示已有消息并在 44 到来时插入。若系统只用 serverReceivedAt，也要加 messageId 形成稳定次序，并接受迟到内容偶尔上移。sequence 的主要价值是发现缺口，不是证明发送者物理点击顺序。分片迁移时旧 owner 停止发号、新 owner 从持久化高水位继续；重复 44 由 messageId 去除。窗口大小应由移动网络延迟分布和 UI 容忍度决定。",
+          "follow_up": "如果 44 永远没到且聊天停止，客户端靠什么确认自己仍有缺口？",
+          "common_miss": "把 NTP 当成精确全序，或为极少数乱序牺牲所有正常消息的端到端延迟。",
+          "repair": "写清 display order、gap detection、buffer timeout 和静默聊天补查四个独立规则。",
+          "sources": [
+            {
+              "source": "hi.breakdown.whatsapp",
+              "heading": "5) How do we handle out-of-order messages?"
+            }
+          ]
+        },
+        {
+          "question": "为什么不在每个 heartbeat 都更新 last seen？多设备竞态怎样避免时间倒退？",
+          "trigger": "候选人用高频数据库写换取看似精确的在线状态，没有算放大。",
+          "answer": "两亿连接每十秒一次心跳就是约两千万次每秒，全部写库既昂贵又仍然瞬间陈旧。在线状态直接由带租约的活跃连接目录回答；只有连接关闭或被 heartbeat 判死时才记录 disconnectAt。一个用户可能在手机断开的同时电脑仍在线，所以聚合器先检查是否还有有效 device lease；只有最后一条连接消失才更新。多个服务器迟到上报时，用 DynamoDB 条件表达式“仅当新 timestamp 更大”防止较早断开覆盖较晚值。整机失联则以 server lease 过期作为近似断点，并允许显示分钟级而非虚假的秒级精度。隐私层还可隐藏或模糊该字段。",
+          "follow_up": "服务器网络分区但客户端实际仍在线，连接目录与数据库分别会报告什么？",
+          "common_miss": "只做写入节流，没有处理任一设备在线、迟到断开事件和服务器整机消失。",
+          "repair": "用手机先断、电脑后断、旧服务器迟到上报的顺序测试条件更新。",
+          "sources": [
+            {
+              "source": "hi.breakdown.whatsapp",
+              "heading": "6) How can we handle a \"last seen\" functionality?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "fb-live-comments",
+      "title": "FB Live Comments",
+      "source": "hi.breakdown.fb-live-comments",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 FB Live Comments 端到端设计图：标出 直播内评论日志与观众消费游标、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 评论提交后如何持久化并广播到正在观看的连接 与 加载最近历史、持续接收新评论并在断线后补齐，每条箭头标明协议或数据。",
+          "明确 评论写入按直播分区的持久表并获得单调 commentId，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 直播内评论日志与观众消费游标，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How can we ensure comments are broadcasted to viewers in real-time?",
+          "2) How will the system scale to support millions of concurrent viewers?",
+          "3) How do we handle client disconnections and ensure viewers don't miss comments?",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.fb-live-comments",
+        "deliverable": "提交 FB Live Comments 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 3 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "Server-Sent Events (SSE): The Efficient One-Way Street",
+          "why": "匹配单向高读低写的直播评论。"
+        },
+        {
+          "source": "hi.pattern.scaling-writes",
+          "heading": "Handling Bursts with Queues and Load Shedding",
+          "why": "隔离评论提交与广播突发。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Indexing for Access Patterns",
+          "why": "用直播分区和评论游标稳定分页。"
+        },
+        {
+          "source": "hi.deep.redis",
+          "heading": "Redis for Pub/Sub",
+          "why": "评估低延迟动态订阅及其非耐久投递语义。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch12",
+          "heading": "传递事件流",
+          "why": "理解评论从事实日志到多个实时消费者。"
+        },
+        {
+          "source": "ddia.ch12",
+          "heading": "失败后重建状态",
+          "why": "支撑连接服务器重启与补读。"
+        },
+        {
+          "source": "ddia.ch7",
+          "heading": "倾斜的工作负载与缓解热点",
+          "why": "处理超级热门直播。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "评论历史与实时事件要共享同一个可恢复游标",
+          "body": "POST /comments/:liveVideoId 先验证 JWT 中的用户身份，把 commentId、liveVideoId、authorId、createdAt 和正文写入数据库。DynamoDB 可用 liveVideoId 作分区键、可排序 commentId 作排序键，历史读取采用 cursor 而非 offset；新评论不断插入时，offset 会让翻页重复或漏项。实时层发送的 event id 直接使用 commentId，用户加入直播先建立推送水位，再读取该水位之前的最近历史，避免“先查历史、后连流”之间出现空洞。评论库是补播依据，SSE 与 Pub/Sub 是低延迟派生通道。若允许最终一致，UI 可乐观显示本人刚提交的评论，但服务器拒绝后必须撤回，且客户端按 commentId 合并持久结果与实时副本。",
+          "takeaway": "用 commentId 贯穿写库、历史游标、实时事件和断线补播。"
+        },
+        {
+          "title": "直播评论的单向流量更适合 SSE",
+          "body": "绝大多数观众只接收评论，发言仍可走普通 HTTP POST，因此为每人维护双向 WebSocket 的能力并没有产生对应价值。SSE 建立长时间 HTTP 响应，服务器用 text/event-stream 推送 id 与 data，浏览器原生支持自动重连和 Last-Event-ID；代理层必须禁用响应缓冲，并设置足够长的空闲超时。每个域名的浏览器连接限制、移动端后台行为和负载均衡的流式支持都要验证。SSE 不是无成本：服务器仍保存每条连接的发送队列、订阅 videoId 和最近进度。若产品后来加入高频双向互动或游戏控制，再重新评估 WebSocket，而不是因为“实时”两个字默认选它。",
+          "takeaway": "协议选择来自读写方向、代理能力和重连语义，不来自流行度。"
+        },
+        {
+          "title": "水平扩展的核心是只把评论送到真正有观众的服务器",
+          "body": "轮询让每个观众持续打数据库；朴素 Pub/Sub 又让每台 Realtime Server 处理所有直播的所有评论，即使本机没有对应观众。更好的方法是按 hash(liveVideoId)%N 划分有限频道，并让 L7 负载均衡按 liveVideoId 把同一直播的观众尽量共置，使服务器只订阅本地需要的频道。另一种是 Dispatcher 维护 videoId→serverIds 的心跳目录，评论到来时直接转发到相关节点；映射陈旧会漏发，所以数据库历史仍要兜底。服务扩缩容时先迁移连接或双发短窗口，再更新订阅，不能在路由切换与频道切换之间留下空白。容量分别计算长连接数、每条评论跨服务器复制数和最终向客户端的扇出字节。",
+          "takeaway": "观众共置和有限频道降低无效处理，持久历史吸收目录短暂不准。"
+        },
+        {
+          "title": "Mega-stream 应改变产品语义，而不是执着投递每一条",
+          "body": "若一场直播每秒五千条评论，屏幕只显示二十条，那么每条平均停留约四毫秒，用户根本读不完。此时保证每人收到全部评论既浪费带宽也没有体验价值。第一层可按速度自适应采样，例如一百条每秒传一半、五千条每秒传百分之一，并提高关注用户或高质量评论的权重。更极端时服务器维护最近一两百条的 ring buffer，每秒生成快照放到 CDN，客户端轮询边缘并平滑动画；延迟从两百毫秒放宽到一两秒，却把数百万相同响应交给 CDN。切换阈值要有迟滞，例如高于十万观众进入、低于七万才退出，防止模式反复抖动；本人评论在本地先显示以保留读己之写。",
+          "takeaway": "在不可读的流速下，代表性与稳定体验比逐条可靠扇出更重要。"
+        },
+        {
+          "title": "Last-Event-ID 把短断线变成有界范围查询",
+          "body": "每个 SSE event 带唯一 commentId，浏览器重连时在 Last-Event-ID 中报告最后收到的值。Realtime Server 先查询该 liveVideoId 上大于游标的评论，按顺序补完后再接入当前流；为防止补播与实时并发造成重复，客户端按 commentId 去重，服务端在同一高水位处切换。短断线可从内存 ring buffer 读取，较长断线查 DynamoDB 游标，超过保留或缺口过大则返回最新快照并明确跳过旧内容。重连必须指数退避加抖动，一场赛事网络恢复时不能让百万观众同时查询历史。Last-Event-ID 只说明客户端最后确认的事件，不保证后面的所有内容已永久保存，所以补源仍是评论数据库。",
+          "takeaway": "断线恢复由事件游标、可查询历史和流切换水位共同完成。"
+        },
+        {
+          "title": "两百毫秒预算下要控制慢观众与审核分支",
+          "body": "端到端两百毫秒可拆成写入与鉴权五十毫秒、事件发布二十毫秒、服务器路由三十毫秒、连接排队与网络一百毫秒。某个移动客户端读得慢时，不能让它的发送缓冲阻塞同直播其他观众；每连接设置字节上限，超过后丢弃较旧的非关键评论并发送 resync-required，客户端改拉快照。评论审核若同步调用重模型会占满预算，可先做廉价规则与封禁检查，高风险内容延迟发布，后续审核删除则发送 tombstone 事件。观测按 liveVideoId 分桶：broadcast p99、每评论扇出数、SSE 队列字节、重连率、采样比例和从 Last-Event-ID 补回的数量。热门直播必须单独看，全球平均会掩盖真正的扇出热点。",
+          "takeaway": "慢连接要局部丢弃和重同步，不能把背压沿整棵广播树传播。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "为什么直播评论选 SSE 而不是 WebSocket？这个选择会在哪些基础设施上失败？",
+          "trigger": "候选人看到实时场景就条件反射使用 WebSocket，没有考虑单向读多写少。",
+          "answer": "观众持续接收、偶尔才通过 HTTP POST 发言，SSE 的服务器到客户端单向流正好匹配，且基于标准 HTTP、浏览器可自动重连并携带 Last-Event-ID；WebSocket 的双向通道在这里没有明显收益。SSE 仍需验证代理和负载均衡是否缓冲流式响应、空闲超时是否会切断连接、浏览器每域连接限制以及移动端后台行为。服务器要定期发送注释 heartbeat 防止中间设备误判空闲，并给每连接发送队列设上限。若未来需求变成高频双向互动，或客户端环境不支持 EventSource，再以真实流量重新选择协议，而不是把 SSE 当永久教条。",
+          "follow_up": "HTTP/2 多路复用会改善浏览器连接限制，但负载均衡粘性和流式超时如何配置？",
+          "common_miss": "只说 SSE 更轻量，未指出代理缓冲、连接上限、断线游标和发送队列。",
+          "repair": "列一张 POST 与下行流量比例表，并在测试环境主动经过真实 CDN、代理和移动网络。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-live-comments",
+              "heading": "1) How can we ensure comments are broadcasted to viewers in real-time?"
+            },
+            {
+              "source": "hi.pattern.realtime-updates",
+              "heading": "Server-Sent Events (SSE): The Efficient One-Way Street"
+            }
+          ]
+        },
+        {
+          "question": "同一直播的观众散在两百台 Realtime Server 上，新评论怎样只送到相关机器而不是全局广播？",
+          "trigger": "候选人让每台服务器订阅所有评论主题，计算量随全站直播数增长。",
+          "answer": "可以把评论流按 hash(liveVideoId)%N 放入有限频道，同时让 L7 入口按 liveVideoId 一致性路由，使相同直播的连接尽量集中；服务器只订阅本机观众涉及的频道，并在最后一个观众离开时取消。若共置不够灵活，Dispatcher 根据服务器心跳维护 videoId 到 serverIds 的集合，把 commentId 只转发给目标节点。扩容迁移时先让新节点建立订阅，再切部分连接，短时间允许双发，客户端按 commentId 去重；顺序反过来会产生漏发。映射短暂陈旧仍可由持久评论库与 Last-Event-ID 修补。要监控每评论跨节点复制数和空订阅命中率。",
+          "follow_up": "一个频道包含一千个 videoId，其中只有一个在本机有观众，你怎样降低频道级无效流量？",
+          "common_miss": "创建每直播一个 Kafka topic，忽略百万直播带来的 topic 与动态订阅管理成本。",
+          "repair": "用三个直播、四台服务器画订阅集合，再演示增加节点时双发与去重。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-live-comments",
+              "heading": "2) How will the system scale to support millions of concurrent viewers?"
+            },
+            {
+              "source": "hi.deep.redis",
+              "heading": "Redis for Pub/Sub"
+            }
+          ]
+        },
+        {
+          "question": "世界杯直播每秒五千条评论、数百万观众，你仍承诺每人两百毫秒内收到全部内容吗？",
+          "trigger": "候选人机械扩大广播集群，没有质疑用户是否能消费如此密集的信息。",
+          "answer": "不会，因为二十条可见槽位意味着每条只停留约四毫秒，逐条全量投递既不可读又把扇出成本放大到天文数字。我会先按评论速率做自适应采样，让每位观众稳定看到可读的几十条，并提升关注者或高质量内容权重。超过例如十万观众或五百条每秒后，切到每秒生成一次最近评论快照并交给 CDN，客户端轮询边缘、按时间戳平滑播放；延迟放宽到一两秒。本人的评论本地乐观插入。进入和退出阈值分开，防止模式抖动。产品 SLO 从“全部送达”改为“代表性、可读且持续更新”，并公开采样率。",
+          "follow_up": "采样后两个观众看到不同内容是否可以接受，审核与高质量排序怎样影响公平？",
+          "common_miss": "把更多 Pub/Sub 分区当唯一答案，没看到相同内容的 CDN 复用和需求降级空间。",
+          "repair": "先算屏幕消费速度，再写出 SSE、采样、CDN 快照三档切换阈值与迟滞。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-live-comments",
+              "heading": "2) How will the system scale to support millions of concurrent viewers?"
+            },
+            {
+              "source": "hi.pattern.scaling-writes",
+              "heading": "Handling Bursts with Queues and Load Shedding"
+            }
+          ]
+        },
+        {
+          "question": "观众断网五秒后带 Last-Event-ID 重连，怎样保证补历史和新实时流之间没有空洞？",
+          "trigger": "候选人只说重连后查数据库，却没有定义查询水位与切换竞态。",
+          "answer": "服务器接收 lastId=120 后，先在该 videoId 的事件序列上捕获当前高水位 H，例如 135；查询 (120,135] 并按 commentId 返回，再从 135 之后订阅实时流。订阅建立与读取高水位必须有可验证的交接协议，也可以先订阅缓冲、再查历史，最后按 id 合并。若补播期间 136 已到缓冲区，历史结束后继续发送，不会漏；重复则由客户端 commentId 集合去除。短缺口优先读内存 ring buffer，较长缺口查 DynamoDB 游标；超过最大补播条数就返回 snapshot-required。百万客户端同时恢复时加入重连抖动并限制历史查询并发，避免恢复路径压垮评论库。",
+          "follow_up": "commentId 不是严格连续整数时，服务端如何表达高水位并查询范围？",
+          "common_miss": "把“先查历史再订阅”当成原子动作，遗漏两者之间刚发布的评论。",
+          "repair": "用编号 120 到 136 逐条演算 subscribe-first 与 snapshot-first 两种交接方案。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-live-comments",
+              "heading": "3) How do we handle client disconnections and ensure viewers don't miss comments?"
+            },
+            {
+              "source": "ddia.ch12",
+              "heading": "失败后重建状态"
+            }
+          ]
+        },
+        {
+          "question": "一个移动观众读取很慢，SSE 发送队列不断增长；你是背压全直播还是丢它的数据？",
+          "trigger": "候选人没有每连接内存上限，或让最慢消费者决定广播速度。",
+          "answer": "直播评论优先可用与实时感，不能让一条慢连接阻塞其他数百万观众。每个连接设置最大排队字节和最大事件年龄；超过阈值时先合并或丢弃旧的普通评论，发送包含最新 commentId 的 resync-required，然后关闭或让客户端拉最新快照。高优先级的系统公告可保留独立小队列。Realtime Server 的 event loop 只做非阻塞写，慢消费者隔离到自身连接，不把 backpressure 推回 Comment Management Service。观测 slow-consumer 数、丢弃事件量、队列驻留时间和重同步成功率；若某网络区域普遍变慢，则降低该区域采样率，而非不断扩充单连接缓冲导致内存耗尽。",
+          "follow_up": "用户刚发布的本人评论被采样或丢弃时，如何维持读己之写体验？",
+          "common_miss": "无限缓存以追求不丢评论，最终因为一个慢客户端耗尽服务器内存。",
+          "repair": "为连接队列写出字节、时间两种上限，并测试超过上限后的 resync 流程。",
+          "sources": [
+            {
+              "source": "hi.breakdown.fb-live-comments",
+              "heading": "1) How can we ensure comments are broadcasted to viewers in real-time?"
+            },
+            {
+              "source": "hi.breakdown.fb-live-comments",
+              "heading": "2) How will the system scale to support millions of concurrent viewers?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "online-chess",
+      "title": "Online Chess",
+      "source": "hi.breakdown.online-chess",
+      "read": {
+        "headings": [
+          "Understanding the Problem",
+          "Functional Requirements",
+          "Non-Functional Requirements",
+          "The Set Up",
+          "Planning the Approach",
+          "Defining the Core Entities",
+          "API or System Interface",
+          "High-Level Design"
+        ],
+        "deliverable": "完成一张 Online Chess 端到端设计图：标出 对局棋盘、轮次、双方时钟与结果、同步提交边界、主要读写路径、分片键与用户可见状态。",
+        "acceptance": [
+          "按页面顺序从“Understanding the Problem”读到“High-Level Design”，中间标题一个不少。",
+          "设计图能逐步解释 玩家落子如何校验轮次、更新棋盘与两只时钟 与 双方实时看到同一局面、匹配结果和赛后排名，每条箭头标明协议或数据。",
+          "明确 权威游戏服务器按 moveNumber 原子接受合法落子并持久化事件，并区分事实源、缓存、索引、队列和客户端视图。",
+          "至少给出一个数量级估算，并能指出第一个容量瓶颈。"
+        ],
+        "repair": "若讲解出现组件跳跃，回到 对局棋盘、轮次、双方时钟与结果，重画“请求—条件写—派生事件—用户可见结果”的单条时序，再复述一遍。"
+      },
+      "deep": {
+        "headings": [
+          "Potential Deep Dives",
+          "1) How do we match players fairly at scale?",
+          "2) How do we scale the game servers to 500K concurrent games?",
+          "3) How do we keep the clock fair despite uneven latency?",
+          "4) How do we keep the leaderboard correct and fast at 10M players?",
+          "Some additional deep dives you might consider",
+          "What is Expected at Each Level?",
+          "Senior"
+        ],
+        "senior_source": "hi.breakdown.online-chess",
+        "deliverable": "提交 Online Chess 深挖包：不变量表、两张故障时序、热点容量推导、指标与一次 35 分钟 Senior mock 记录。",
+        "acceptance": [
+          "逐项覆盖 Potential Deep Dives 中列出的 4 个问题，并能说明方案代价。",
+          "至少演练重复、乱序、依赖超时和局部分区中的两类故障。",
+          "回答包含状态、路径、取舍、失败语义与量化指标，而非组件清单。",
+          "mock 后记录 critical miss、修复动作和同题复测证据。"
+        ],
+        "repair": "若深挖答案停在技术名词，选最薄弱的一题，补“触发条件—不变量—故障注入—指标—回滚”五格，再进行 10 分钟复测。"
+      },
+      "concepts": [
+        {
+          "source": "hi.pattern.realtime-updates",
+          "heading": "Websockets: The Full-Duplex Champion",
+          "why": "承载双向落子、时钟和重连。"
+        },
+        {
+          "source": "hi.pattern.dealing-with-contention",
+          "heading": "Optimistic Concurrency Control",
+          "why": "用 moveNumber 拒绝旧局面写入。"
+        },
+        {
+          "source": "hi.deep.redis",
+          "heading": "Redis for Leaderboards",
+          "why": "理解匹配池与排行榜故障边界。"
+        },
+        {
+          "source": "hi.core.data-modeling",
+          "heading": "Entities, Keys & Relationships",
+          "why": "分清 Game、Move、Player、Rating 与派生榜单。"
+        }
+      ],
+      "ddia": [
+        {
+          "source": "ddia.ch9",
+          "heading": "分布式锁和租约",
+          "why": "给游戏所有者提供 epoch 与 fencing。"
+        },
+        {
+          "source": "ddia.ch9",
+          "heading": "不可靠的时钟",
+          "why": "设计公平的服务端时钟。"
+        },
+        {
+          "source": "ddia.ch10",
+          "heading": "线性一致性",
+          "why": "解释同一对局的严格顺序。"
+        }
+      ],
+      "lecture": [
+        {
+          "title": "一盘棋由单一权威状态机裁决",
+          "body": "Game 记录 gameId、两名 playerId、初始规则、currentPosition、sideToMove、moveNumber、剩余时钟、status 和 version；Move 作为追加事件保存 SAN/UCI、客户端 requestId、接收时刻与结果。客户端发 move(gameId,expectedVersion,from,to,promotion)，Game Server 验证轮到谁、棋子移动合法、王未被将死，再以版本条件提交新局面。动画、音效和本地棋盘只是预测视图，服务器拒绝时必须回滚。对局内所有命令交给同一 actor 或同一分区顺序处理，比跨多个无锁服务拼接更易守住“一回合只接受一步”。定期快照 FEN，加上之后的 Move 日志，可在进程重启时重建，而无需每次重放整局。",
+          "takeaway": "服务器版本化棋局并裁决合法性；客户端预测不能成为最终棋盘。"
+        },
+        {
+          "title": "公平匹配是等待时间与分差的动态交换",
+          "body": "进入队列时保存 ticketId、playerId、rating、region、模式、timeControl 和 enqueuedAt。匹配器先在同一区域、相同模式和很窄分差内寻找；等待每增加几秒，允许的 rating 窗口逐步扩大，但跨地域前仍检查预计 RTT，避免为了快而生成明显不公平的对局。Redis sorted set 可按 rating 排序，另用时间或模式分桶；领取两张 ticket 必须原子删除，并以 ticketId 防止同一玩家同时匹配两场。大量玩家不应过早按 rating 细碎分片，否则相邻分片看不到彼此；可按大区和模式分池，再让协调者查询相邻 rating 段。取消与匹配并发时，以 match 状态条件写决定唯一结果。",
+          "takeaway": "搜索半径随等待扩大，评分、公平、延迟和重复匹配都要有可测规则。"
+        },
+        {
+          "title": "五十万并发棋局按 gameId 分片并保留可接管证据",
+          "body": "五十万局意味着约一百万 WebSocket 连接，Game Server 既维护棋局 actor，也运行两个计时器。入口通过 gameId 路由到 owner，连接目录记录 serverId 与 lease epoch；同一局的两名玩家必须到同一权威 actor，避免双方落子跨节点竞争。每步提交后追加 Move 日志，并每若干步或每分钟写快照；服务器崩溃时新 owner 读取最近 FEN、重放后续事件、恢复剩余时间，再让客户端以 lastMoveNumber 重连。正常迁移先停止接收新命令、刷新日志、转移 epoch，旧 owner 的晚写因 epoch 或 version 过期被拒绝。容量按连接、每秒落子、合法性计算和快照 IO 分开估算，因为大多数连接静默，不能用连接数等同于命令 QPS。",
+          "takeaway": "单局单 owner 保顺序，事件与快照让 owner 更换后能恢复。"
+        },
+        {
+          "title": "棋钟以服务器单调时间结算，不按客户端倒计时扣款",
+          "body": "服务器无需每毫秒持久化两个时钟。棋局保存 activeSide、remainingMs 和 turnStartedMonotonic；收到合法落子时计算 elapsed=nowMonotonic-turnStarted，扣除当前方时间、加 increment，再切换 activeSide。墙上时间可写日志但不参与间隔计算，避免 NTP 回拨。网络延迟不对称时，完全按到达时间会惩罚高 RTT 玩家；可采用客户端显示预测、服务器周期校准，并只补偿经过认证的有限传输估计，例如取近期 RTT 的一半且设置上限，绝不能信任客户端自报思考时间。断线不会暂停权威棋钟，除非产品规则明确提供断线宽限。每次响应带 serverRemainingMs 与 moveNumber，客户端平滑校正而非突然跳动。",
+          "takeaway": "权威扣时发生在落子边界，单调时钟与有上限的延迟补偿共同维持公平。"
+        },
+        {
+          "title": "并发落子用 moveNumber 或 version 拒绝旧命令",
+          "body": "玩家双击、手机与网页同时在线或网络重试，都会让同一方提交重复 move。请求携带 clientMoveId 与 expectedMoveNumber；actor 若已处理该 clientMoveId 就返回原结果，若 expectedMoveNumber 不等于当前值则返回最新局面，只有版本匹配且合法才追加下一步。两名玩家几乎同时发送时，轮到的一方先被接受，另一方会因 sideToMove 或版本失败，不需要给整盘棋加跨服务分布式锁。服务器故障后重放日志得到相同 moveNumber，重试仍可去重。WebSocket 只负责低延迟传输，不保证命令恰好一次；每条接受结果都要等持久事件提交后再广播给双方。",
+          "takeaway": "expectedMoveNumber 是棋局级乐观并发条件，clientMoveId 收敛网络重试。"
+        },
+        {
+          "title": "排行榜是赛果的派生视图，评分更新才是事实",
+          "body": "Game 结束时生成唯一 resultId，评分服务读取双方当前 rating，以同一 resultId 计算 Elo 或其他算法，并在事务中写两人的新 rating 与 ratingHistory；重复结束事件命中唯一约束后返回原版本，不能二次加减。Redis sorted set 用 score 保存当前 rating，支持 Top N 和按分数附近查询，但它是可重建视图：数据库事务提交后经 outbox 更新 ZSET，失败可重放。查询“我的名次”要说明并列规则，十 million 玩家直接 ZREVRANK 很快，但强一致地跨分片维护全局顺序很昂贵；可按赛季和模式分榜，允许数秒延迟。分页用 (score,playerId) 游标，不能用频繁变动的 offset。赛果撤销则生成补偿版本并重算相关历史。",
+          "takeaway": "resultId 保证评分只结算一次，Redis 提供快速排名而不取代可审计评分账本。"
+        }
+      ],
+      "staff_qa": [
+        {
+          "question": "白方手机和网页几乎同时提交两步不同的棋，你怎样保证最多接受一手？",
+          "trigger": "候选人把并发落子错误地引用到 matchmaking，或只说 WebSocket 有序。",
+          "answer": "两端请求都携带同一 expectedMoveNumber=26 和各自 clientMoveId，且按 gameId 路由到唯一棋局 actor。actor 串行检查 sideToMove、规则合法性和版本；第一条被接受后追加 Move 27 并把 version 改为 27，第二条随后因 expectedMoveNumber 过期被拒绝并收到最新 FEN。若同一请求因超时重发，clientMoveId 索引返回第一次的裁决，不再次走棋。即使 actor 模型用数据库落地，UPDATE game ... WHERE version=26 的乐观条件也只允许一个成功。广播必须在 Move 事件持久化后进行，防止双方看到后来无法恢复的局面。",
+          "follow_up": "actor 在写事件成功、尚未回客户端前崩溃，重连请求具体得到什么？",
+          "common_miss": "把连接内帧顺序等同于跨设备业务顺序，没有棋局版本和幂等请求标识。",
+          "repair": "用两个 expectedMoveNumber=26 的请求画条件提交，明确第二个返回 conflict 与最新状态。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-chess",
+              "heading": "2) Players should be able to play a game in real time"
+            },
+            {
+              "source": "hi.pattern.dealing-with-contention",
+              "heading": "Optimistic Concurrency Control"
+            }
+          ]
+        },
+        {
+          "question": "两个玩家 RTT 分别为二十毫秒和三百毫秒，服务器怎样扣钟才不让客户端作弊？",
+          "trigger": "候选人信任客户端上报剩余时间，或完全忽略不对称网络造成的体验差异。",
+          "answer": "权威值只在服务器：保存 activeSide、remainingMs 和 turnStarted 的单调时刻，合法落子抵达时扣除服务器观测到的 elapsed。客户端每秒动画只是预测，响应中的 serverRemainingMs 定期校准。若产品允许延迟补偿，可根据近期经服务端 ping/pong 测得的 RTT 估算单程时间，补偿值取有限窗口统计并设置严格上限；不能采用客户端声称的“我思考了多少毫秒”。网络极差时宁愿显示连接质量并让玩家选择更慢时限，也不能无限返还时间。NTP 调整只影响审计时间戳，计算间隔使用 monotonic clock，服务器迁移则把剩余值和最后持久化落子一起恢复。",
+          "follow_up": "服务器在某回合中途崩溃，重启耗时五秒，这五秒算谁的？",
+          "common_miss": "每秒把时钟写数据库，既放大 IO 又仍不能解决客户端延迟与服务停顿语义。",
+          "repair": "用一回合时间线计算无补偿、有限补偿和恶意客户端三种结果。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-chess",
+              "heading": "3) How do we keep the clock fair despite uneven latency?"
+            },
+            {
+              "source": "ddia.ch9",
+              "heading": "不可靠的时钟"
+            }
+          ]
+        },
+        {
+          "question": "承载一万盘棋的 Game Server 宕机后，如何恢复局面、时钟和连接而不产生两个 owner？",
+          "trigger": "候选人只说客户端重连到另一台机器，没有持久状态与所有权 epoch。",
+          "answer": "连接目录中的 server lease 到期后，协调层为受影响 gameId 分配更高 epoch 的新 owner；旧进程即使恢复也不能接受低 epoch 写。新服务器读取最近 FEN 快照，按 moveNumber 重放之后的 Move 事件，得到 currentPosition、sideToMove 和最后持久化的 remainingMs，再按预先定义的故障暂停或继续计时策略校正。玩家以 gameId、device token 与 lastMoveNumber 重连，新 owner 返回缺失落子和权威时钟。为了不让一万局同时重放打爆存储，快照间隔要限制每局重放长度，并按比赛剩余时间和连接到达分批恢复。所有客户端命令仍用 expectedMoveNumber 去重。",
+          "follow_up": "旧服务器只是网络分区并未真正死亡，它怎样收到或被迫遵守新 epoch？",
+          "common_miss": "把 WebSocket 重连当成恢复全部，漏掉棋局日志、计时规则和僵尸 owner fencing。",
+          "repair": "故障演练必须包含 lease 过期、新 epoch、快照重放、客户端补步和旧 owner 晚写。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-chess",
+              "heading": "2) How do we scale the game servers to 500K concurrent games?"
+            }
+          ]
+        },
+        {
+          "question": "匹配等待越久就放宽分差听起来简单，怎样防止重复匹配和跨地域高延迟对局？",
+          "trigger": "候选人只说 Redis sorted set 最近邻，没有原子领取、取消竞态或区域约束。",
+          "answer": "ticket 包含唯一 ticketId、playerId、rating、region、mode、timeControl 与 enqueuedAt。匹配器先在同 region 和模式内查 rating 邻域，允许窗口随等待秒数扩大；只有等待超过阈值且双方预计 RTT 仍低于上限时才跨区。选中两张 ticket 后用 Lua 或条件事务同时确认两者仍为 WAITING、原子改为 MATCHED 并创建 gameId，任何一个已取消就整体失败重选。playerId 还有 active-ticket 唯一约束，阻止多设备重复排队。分池不宜按细 rating 段硬切，否则边界玩家互相看不见；应按区域、模式粗分并查询相邻分数范围。质量看等待 p95、rating 差分布、跨区 RTT 和取消竞态率。",
+          "follow_up": "Redis 匹配池节点故障时，已经从队列移除但尚未创建 Game 的两名玩家如何回收？",
+          "common_miss": "只优化最快配对，没有把公平、网络质量和一次性领取写成原子条件。",
+          "repair": "用匹配、取消同时发生的时序验证 ticket 状态机和 gameId 幂等创建。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-chess",
+              "heading": "1) How do we match players fairly at scale?"
+            }
+          ]
+        },
+        {
+          "question": "一场比赛结束事件重复送达三次，如何让双方评分和千万玩家排行榜仍然正确？",
+          "trigger": "候选人直接对 Redis ZSET 做 ZINCRBY，没有可审计赛果和重复保护。",
+          "answer": "Game 完成时生成稳定 resultId，评分服务在数据库事务中检查 resultId 唯一约束，读取双方同一版本 rating，计算并写两人的新值与 history；第二、三次事件命中已处理记录后返回原评分，不再增减。事务同时写 outbox，异步消费者用 ratingVersion 更新 Redis sorted set，重复更新是覆盖同版本，乱序旧版本被拒绝。排行榜因此可有几秒延迟却不会决定事实；ZSET 丢失时从评分表重建。我的名次用确定的并列规则和 (score,playerId) 游标查询。若赛果被撤销，不删除旧账，而是写补偿 result 并产生更高评分版本。",
+          "follow_up": "两场属于同一玩家的比赛几乎同时结束，评分计算应按什么顺序串行？",
+          "common_miss": "把 Redis 原子自增当成跨两名玩家的一次评分事务，无法处理重复和审计。",
+          "repair": "画出 result ledger、双人评分事务、outbox 和 ZSET 投影，重放同一 resultId 三次。",
+          "sources": [
+            {
+              "source": "hi.breakdown.online-chess",
+              "heading": "4) How do we keep the leaderboard correct and fast at 10M players?"
+            },
+            {
+              "source": "hi.deep.redis",
+              "heading": "Redis for Leaderboards"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
